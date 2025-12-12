@@ -1,0 +1,164 @@
+import asyncio
+from datetime import datetime
+from typing import Callable, Optional, Sequence
+from sqlalchemy import select, func, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.models.snapshot import Snapshot, SnapshotValue
+from app.repositories.base import BaseRepository
+
+# Chunk size for bulk inserts to prevent blocking event loop
+BULK_INSERT_CHUNK_SIZE = 5000
+
+
+class SnapshotRepository(BaseRepository[Snapshot]):
+    """Repository for Snapshot operations."""
+
+    def __init__(self, session: AsyncSession):
+        super().__init__(Snapshot, session)
+
+    async def get_with_values(
+        self,
+        snapshot_id: str,
+        limit: int | None = None,
+        offset: int = 0
+    ) -> Snapshot | None:
+        """
+        Get snapshot with values loaded.
+
+        Args:
+            snapshot_id: The snapshot ID
+            limit: Max number of values to load (None = all)
+            offset: Number of values to skip
+        """
+        # First get the snapshot
+        result = await self.session.execute(
+            select(Snapshot).where(Snapshot.id == snapshot_id)
+        )
+        snapshot = result.scalar_one_or_none()
+        if not snapshot:
+            return None
+
+        # Then get values with pagination
+        values_query = (
+            select(SnapshotValue)
+            .where(SnapshotValue.snapshot_id == snapshot_id)
+            .order_by(SnapshotValue.pv_name)
+            .offset(offset)
+        )
+        if limit is not None:
+            values_query = values_query.limit(limit)
+
+        values_result = await self.session.execute(values_query)
+        snapshot.values = list(values_result.scalars().all())
+
+        return snapshot
+
+    async def search(
+        self,
+        title: str | None = None,
+        limit: int = 100
+    ) -> list[Snapshot]:
+        """Search snapshots by title."""
+        query = select(Snapshot)
+
+        if title:
+            query = query.where(Snapshot.title.ilike(f"%{title}%"))
+
+        query = query.order_by(Snapshot.created_at.desc()).limit(limit)
+
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
+    async def get_value_count(self, snapshot_id: str) -> int:
+        """Get count of values in a snapshot."""
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(SnapshotValue)
+            .where(SnapshotValue.snapshot_id == snapshot_id)
+        )
+        return result.scalar() or 0
+
+    async def delete_with_values(self, snapshot_id: str) -> bool:
+        """Delete snapshot and all its values."""
+        snapshot = await self.get_by_id(snapshot_id)
+        if not snapshot:
+            return False
+
+        # Cascade delete will handle values
+        await self.delete(snapshot)
+        return True
+
+
+class SnapshotValueRepository(BaseRepository[SnapshotValue]):
+    """Repository for SnapshotValue operations."""
+
+    def __init__(self, session: AsyncSession):
+        super().__init__(SnapshotValue, session)
+
+    async def bulk_create(
+        self,
+        values: list[SnapshotValue],
+        progress_callback: Optional[Callable[[int, int, str], None]] = None
+    ) -> None:
+        """
+        Bulk insert snapshot values in chunks to prevent blocking the event loop.
+
+        Inserts in chunks of BULK_INSERT_CHUNK_SIZE to:
+        1. Prevent long-running DB operations from blocking other requests
+        2. Allow progress tracking during large inserts
+        3. Reduce memory pressure on the database
+        """
+        total = len(values)
+
+        if total <= BULK_INSERT_CHUNK_SIZE:
+            # Small dataset - single insert
+            self.session.add_all(values)
+            await self.session.flush()
+            await asyncio.sleep(0)  # Yield to event loop
+            return
+
+        # Large dataset - chunked insert
+        for i in range(0, total, BULK_INSERT_CHUNK_SIZE):
+            chunk = values[i:i + BULK_INSERT_CHUNK_SIZE]
+            self.session.add_all(chunk)
+            await self.session.flush()
+            await asyncio.sleep(0)  # Yield to event loop after each chunk
+
+            # Report progress if callback provided
+            if progress_callback:
+                current = min(i + BULK_INSERT_CHUNK_SIZE, total)
+                await progress_callback(current, total, f"Saved {current}/{total} values...")
+
+    async def get_by_snapshot(self, snapshot_id: str) -> list[SnapshotValue]:
+        """Get all values for a snapshot."""
+        result = await self.session.execute(
+            select(SnapshotValue)
+            .where(SnapshotValue.snapshot_id == snapshot_id)
+        )
+        return list(result.scalars().all())
+
+    async def count_by_snapshot(self, snapshot_id: str) -> int:
+        """Get count of values in a snapshot."""
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(SnapshotValue)
+            .where(SnapshotValue.snapshot_id == snapshot_id)
+        )
+        return result.scalar() or 0
+
+    async def get_by_snapshot_and_pvs(
+        self,
+        snapshot_id: str,
+        pv_ids: list[str]
+    ) -> list[SnapshotValue]:
+        """Get specific PV values from a snapshot."""
+        result = await self.session.execute(
+            select(SnapshotValue)
+            .where(
+                SnapshotValue.snapshot_id == snapshot_id,
+                SnapshotValue.pv_id.in_(pv_ids)
+            )
+        )
+        return list(result.scalars().all())

@@ -1,9 +1,61 @@
+[project]
+name = "squirrel-backend"
+version = "0.1.0"
+description = "High-performance EPICS snapshot/restore backend"
+requires-python = ">=3.11"
+
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "sqlalchemy>=2.0.25",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.0",
+    "pyepics>=3.5.2",
+    "python-multipart>=0.0.6",
+    "httpx>=0.26.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "mypy>=1.8.0",
+    "pre-commit>=3.6.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_backend"
+
 [tool.black]
 line_length = 120
 
 [tool.ruff]
-extend-exclude = ["__init__.py"]
 line-length = 120
+target-version = "py311"
+extend-exclude = ["__init__.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = []
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
 
 [tool.isort]
 profile = "black"
