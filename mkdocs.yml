@@ -1,0 +1,92 @@
+# Project Information
+site_name: eed-swapps-template
+site_url: https://slaclab.github.io/eed-swapps-template/
+site_author: SLAC National Accelerator Laboratory - EED / Software Applications Group
+site_description: Documentation for the eed-swapps-template software application.
+
+# Repository
+repo_name: slaclab/eed-swapps-template
+repo_url: https://github.com/slaclab/eed-swapps-template
+
+# Configuration
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - content.code.copy
+    - navigation.top
+    - navigation.tabs
+    - navigation.indexes
+    - navigation.footer
+    - search.highlight
+    - search.share
+    - search.suggest
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      toggle:
+        icon: material/toggle-switch-off-outline
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      toggle:
+        icon: material/toggle-switch
+        name: Switch to light mode
+
+# Plugins
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [eed-swapps-template]
+          options:
+            docstring_style: numpy
+            members_order: source
+            show_root_toc_entry: false
+            show_symbol_type_toc: true
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - git-revision-date-localized:
+      exclude:
+        - index.md
+      enable_creation_date: true
+      fallback_to_build_date: true
+  - git-committers:
+      exclude:
+        - index.md
+      repository: slaclab/eed-swapps-template
+      branch: main
+
+# Additional Configuration
+extra:
+  generator: false
+
+# Extensions
+markdown_extensions:
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+      options:
+        custom_icons:
+          - images/
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.blocks.caption
+
+# Page Tree
+nav:
+  - Home: index.md
+  - How To:
+    - how_to/index.md
+  - API Reference:
+    - api_reference/index.md
+    - api_reference/hello_world.md

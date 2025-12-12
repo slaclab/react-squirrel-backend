@@ -1,0 +1,15 @@
+name: eed-swapps-template
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pytest
+  - mkdocs
+  - mkdocs-material
+  - mkdocstrings
+  - mkdocstrings-python
+  - pre-commit
+  - flake8
+  - pip
+  - pip:
+    - ufmt
