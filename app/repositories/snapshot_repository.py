@@ -1,4 +1,6 @@
 import asyncio
+import json
+import uuid
 from datetime import datetime
 from typing import Callable, Optional, Sequence
 from sqlalchemy import select, func, delete
@@ -162,3 +164,50 @@ class SnapshotValueRepository(BaseRepository[SnapshotValue]):
             )
         )
         return list(result.scalars().all())
+
+    async def bulk_create_fast(
+        self,
+        snapshot_id: str,
+        values: list[dict]
+    ) -> int:
+        """
+        Use PostgreSQL COPY for bulk insert (40k rows in ~2 seconds).
+
+        Args:
+            snapshot_id: The snapshot ID
+            values: List of dicts with keys:
+                - pv_id: str
+                - pv_name: str
+                - setpoint_value: Any (will be JSON serialized)
+                - readback_value: Any (will be JSON serialized)
+                - status: int | None
+                - severity: int | None
+                - timestamp: datetime | None
+
+        Returns:
+            Number of rows inserted
+        """
+        from app.services.bulk_insert_service import get_bulk_insert_service
+
+        bulk_service = await get_bulk_insert_service()
+
+        # Convert to tuples for COPY
+        records = []
+        for v in values:
+            # Serialize values to JSON strings for JSONB columns
+            setpoint_json = json.dumps(v.get("setpoint_value")) if v.get("setpoint_value") is not None else None
+            readback_json = json.dumps(v.get("readback_value")) if v.get("readback_value") is not None else None
+
+            records.append((
+                str(uuid.uuid4()),
+                snapshot_id,
+                v["pv_id"],
+                v["pv_name"],
+                setpoint_json,
+                readback_json,
+                v.get("status"),
+                v.get("severity"),
+                v.get("timestamp"),
+            ))
+
+        return await bulk_service.bulk_insert_snapshot_values(records)

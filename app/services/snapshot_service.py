@@ -33,6 +33,7 @@ from app.models.snapshot import Snapshot, SnapshotValue
 from app.repositories.snapshot_repository import SnapshotRepository, SnapshotValueRepository
 from app.repositories.pv_repository import PVRepository
 from app.services.epics_service import EpicsService, EpicsValue
+from app.services.redis_service import RedisService
 from app.schemas.snapshot import (
     NewSnapshotDTO, SnapshotDTO, SnapshotSummaryDTO, PVValueDTO, EpicsValueDTO,
     RestoreRequestDTO, RestoreResultDTO, ComparisonResultDTO
@@ -47,13 +48,15 @@ class SnapshotService:
     def __init__(
         self,
         session: AsyncSession,
-        epics_service: EpicsService
+        epics_service: EpicsService,
+        redis_service: RedisService | None = None
     ):
         self.session = session
         self.snapshot_repo = SnapshotRepository(session)
         self.value_repo = SnapshotValueRepository(session)
         self.pv_repo = PVRepository(session)
         self.epics = epics_service
+        self.redis = redis_service
 
     def _epics_to_dto(self, epics_val: EpicsValue) -> EpicsValueDTO | None:
         """Convert EPICS value to DTO."""
@@ -271,6 +274,115 @@ class SnapshotService:
             )
         except Exception as e:
             logger.exception(f"Error creating snapshot '{data.title}': {e}")
+            raise
+
+    async def create_snapshot_from_cache(
+        self,
+        data: NewSnapshotDTO,
+        created_by: str | None = None,
+        progress_callback: Optional[Callable] = None
+    ) -> SnapshotSummaryDTO:
+        """
+        Create snapshot by reading from Redis cache (instant).
+
+        This is much faster than direct EPICS reads when the cache is populated
+        by the PV Monitor background service.
+        """
+        if not self.redis:
+            logger.warning("Redis not available, falling back to direct EPICS read")
+            return await self.create_snapshot(data, created_by, progress_callback)
+
+        logger.info(f"Creating snapshot from cache: {data.title}")
+        start_time = datetime.now()
+
+        try:
+            # Get all PVs and their addresses
+            pv_addresses = await self.pv_repo.get_all_addresses()
+            logger.info(f"Found {len(pv_addresses)} PVs to snapshot")
+
+            if progress_callback:
+                await progress_callback(0, len(pv_addresses), "Reading from cache...")
+
+            # Get all cached values from Redis (O(1) per value)
+            cached_values = await self.redis.get_all_pv_values()
+            logger.info(f"Retrieved {len(cached_values)} cached values from Redis")
+
+            # Check cache coverage
+            if len(cached_values) == 0:
+                logger.warning("Cache is empty, falling back to direct EPICS read")
+                return await self.create_snapshot(data, created_by, progress_callback)
+
+            read_time = datetime.now()
+            logger.info(f"Cache read completed in {(read_time - start_time).total_seconds():.2f}s")
+
+            # Create snapshot record
+            snapshot = Snapshot(
+                title=data.title,
+                comment=data.comment,
+                created_by=created_by
+            )
+            snapshot = await self.snapshot_repo.create(snapshot)
+
+            # Build snapshot values from cache
+            snapshot_values_data = []
+
+            for pv_id, setpoint_addr, readback_addr, config_addr in pv_addresses:
+                setpoint_cached = cached_values.get(setpoint_addr) if setpoint_addr else None
+                readback_cached = cached_values.get(readback_addr) if readback_addr else None
+
+                # Build setpoint value dict
+                setpoint_value = None
+                if setpoint_cached and setpoint_cached.get("connected"):
+                    setpoint_value = {
+                        "value": _sanitize_for_json(setpoint_cached.get("value")),
+                        "status": setpoint_cached.get("status"),
+                        "severity": setpoint_cached.get("severity"),
+                        "timestamp": setpoint_cached.get("timestamp"),
+                    }
+
+                # Build readback value dict
+                readback_value = None
+                if readback_cached and readback_cached.get("connected"):
+                    readback_value = {
+                        "value": _sanitize_for_json(readback_cached.get("value")),
+                        "status": readback_cached.get("status"),
+                        "severity": readback_cached.get("severity"),
+                        "timestamp": readback_cached.get("timestamp"),
+                    }
+
+                snapshot_values_data.append({
+                    "pv_id": pv_id,
+                    "pv_name": setpoint_addr or readback_addr or "",
+                    "setpoint_value": setpoint_value,
+                    "readback_value": readback_value,
+                    "status": setpoint_cached.get("status") if setpoint_cached else None,
+                    "severity": setpoint_cached.get("severity") if setpoint_cached else None,
+                    "timestamp": datetime.now(),
+                })
+
+            if progress_callback:
+                await progress_callback(
+                    len(pv_addresses), len(pv_addresses),
+                    f"Saving {len(snapshot_values_data)} values to database..."
+                )
+
+            # Use fast COPY insert
+            count = await self.value_repo.bulk_create_fast(snapshot.id, snapshot_values_data)
+
+            total_time = datetime.now()
+            logger.info(f"Snapshot created from cache in {(total_time - start_time).total_seconds():.2f}s "
+                       f"({count} values)")
+
+            return SnapshotSummaryDTO(
+                id=snapshot.id,
+                title=snapshot.title,
+                comment=snapshot.comment,
+                createdDate=snapshot.created_at,
+                createdBy=snapshot.created_by,
+                pvCount=count
+            )
+        except Exception as e:
+            logger.exception(f"Error creating snapshot from cache '{data.title}': {e}")
             raise
 
     async def restore_snapshot(

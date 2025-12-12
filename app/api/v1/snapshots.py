@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.services.snapshot_service import SnapshotService
 from app.services.epics_service import get_epics_service
+from app.services.redis_service import get_redis_service
 from app.services.job_service import JobService
 from app.services.background_tasks import run_snapshot_creation
 from app.models.job import JobType
@@ -55,12 +56,16 @@ async def create_snapshot(
     data: NewSnapshotDTO,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    async_mode: bool = Query(True, alias="async", description="Run snapshot creation in background")
+    async_mode: bool = Query(True, alias="async", description="Run snapshot creation in background"),
+    use_cache: bool = Query(True, description="Read from Redis cache (instant) vs direct EPICS read")
 ):
     """
-    Create a new snapshot by reading all PVs from EPICS.
+    Create a new snapshot by reading all PVs.
 
     This captures the current state of all configured PVs.
+
+    - use_cache=true (default): Read from Redis cache (instant, <5s for 40k PVs)
+    - use_cache=false: Read directly from EPICS (slower, 30-60s for 40k PVs)
 
     By default (async=true), this returns immediately with a job ID that can be
     polled for status. Set async=false for synchronous operation (may timeout
@@ -71,7 +76,7 @@ async def create_snapshot(
         job_service = JobService(db)
         job = await job_service.create_job(
             JobType.SNAPSHOT_CREATE,
-            job_data={"title": data.title, "comment": data.comment}
+            job_data={"title": data.title, "comment": data.comment, "use_cache": use_cache}
         )
 
         # CRITICAL: Commit the job to database before returning
@@ -79,17 +84,23 @@ async def create_snapshot(
         await db.commit()
 
         # Schedule the background task using FastAPI's BackgroundTasks
-        background_tasks.add_task(run_snapshot_creation, job.id, data.title, data.comment)
+        background_tasks.add_task(run_snapshot_creation, job.id, data.title, data.comment, use_cache)
 
         return success_response(JobCreatedDTO(
             jobId=job.id,
-            message=f"Snapshot creation started for '{data.title}'"
+            message=f"Snapshot creation started for '{data.title}'" + (" (from cache)" if use_cache else " (direct EPICS)")
         ))
     else:
         # Synchronous mode (legacy behavior)
         epics = get_epics_service()
-        service = SnapshotService(db, epics)
-        snapshot = await service.create_snapshot(data)
+        redis = get_redis_service()
+        service = SnapshotService(db, epics, redis)
+
+        if use_cache:
+            snapshot = await service.create_snapshot_from_cache(data)
+        else:
+            snapshot = await service.create_snapshot(data)
+
         return success_response(snapshot)
 
 

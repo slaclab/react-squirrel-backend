@@ -1,25 +1,8 @@
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable, Optional
 import random
 
-
-@dataclass
-class MockEpicsValue:
-    value: Any
-    status: int = 0
-    severity: int = 0
-    timestamp: datetime = None
-    units: str = ""
-    precision: int = 3
-    upper_ctrl_limit: float = 100.0
-    lower_ctrl_limit: float = 0.0
-    connected: bool = True
-    error: str | None = None
-
-    def __post_init__(self):
-        if self.timestamp is None:
-            self.timestamp = datetime.now()
+from app.services.epics_service import EpicsValue
 
 
 class MockEpicsService:
@@ -36,26 +19,57 @@ class MockEpicsService:
         """Set multiple mock values."""
         self._mock_data.update(values)
 
-    async def connect_pv(self, pv_name: str):
+    async def connect_pv(self, pv_name: str) -> bool:
+        """Mock pre-connect to a PV."""
+        return True
+
+    async def connect_many(self, pv_names: list[str]) -> None:
+        """Mock pre-connect to multiple PVs."""
         pass
 
-    async def connect_many(self, pv_names: list[str]):
-        pass
-
-    async def get_single(self, pv_name: str) -> MockEpicsValue:
+    async def get_single(self, pv_name: str) -> EpicsValue:
+        """Read a single PV."""
         if pv_name in self._mock_data:
-            return MockEpicsValue(value=self._mock_data[pv_name])
+            return EpicsValue(
+                value=self._mock_data[pv_name],
+                timestamp=datetime.now(),
+                connected=True
+            )
         # Generate random value if not mocked
-        return MockEpicsValue(value=random.uniform(0, 100))
+        return EpicsValue(
+            value=random.uniform(0, 100),
+            timestamp=datetime.now(),
+            connected=True
+        )
 
-    async def get_many(self, pv_names: list[str]) -> dict[str, MockEpicsValue]:
+    async def get_many(self, pv_names: list[str]) -> dict[str, EpicsValue]:
+        """Read multiple PVs."""
         return {pv: await self.get_single(pv) for pv in pv_names}
 
+    async def get_many_with_progress(
+        self,
+        pv_names: list[str],
+        progress_callback: Optional[Callable] = None
+    ) -> dict[str, EpicsValue]:
+        """Read multiple PVs with progress callback."""
+        total = len(pv_names)
+        if progress_callback:
+            await progress_callback(0, total, "Starting to read PVs...")
+
+        results = await self.get_many(pv_names)
+
+        if progress_callback:
+            await progress_callback(total, total, f"Completed: {total}/{total} PVs connected")
+
+        return results
+
     async def put_single(self, pv_name: str, value: Any) -> tuple[bool, str | None]:
+        """Write a value to a single PV."""
         self._mock_data[pv_name] = value
         return True, None
 
     async def put_many(self, values: dict[str, Any]) -> dict[str, tuple[bool, str | None]]:
+        """Write values to multiple PVs."""
         results = {}
         for pv_name, value in values.items():
             success, error = await self.put_single(pv_name, value)
@@ -63,4 +77,5 @@ class MockEpicsService:
         return results
 
     async def shutdown(self):
+        """Cleanup resources."""
         pass

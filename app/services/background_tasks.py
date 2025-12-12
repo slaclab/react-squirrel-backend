@@ -8,6 +8,7 @@ from app.models.job import JobStatus, JobType
 from app.repositories.job_repository import JobRepository
 from app.services.snapshot_service import SnapshotService
 from app.services.epics_service import get_epics_service
+from app.services.redis_service import get_redis_service
 from app.schemas.snapshot import NewSnapshotDTO
 
 logger = logging.getLogger(__name__)
@@ -16,14 +17,15 @@ logger = logging.getLogger(__name__)
 async def run_snapshot_creation(
     job_id: str,
     title: str,
-    comment: str | None = None
+    comment: str | None = None,
+    use_cache: bool = True
 ) -> None:
     """
     Background task to create a snapshot.
 
     This runs in a separate asyncio task and uses its own database session.
     """
-    logger.info(f"Background task started for job {job_id}: Creating snapshot '{title}'")
+    logger.info(f"Background task started for job {job_id}: Creating snapshot '{title}' (use_cache={use_cache})")
 
     async with async_session_maker() as session:
         try:
@@ -41,7 +43,8 @@ async def run_snapshot_creation(
 
             # Create the snapshot
             epics = get_epics_service()
-            snapshot_service = SnapshotService(session, epics)
+            redis = get_redis_service()
+            snapshot_service = SnapshotService(session, epics, redis)
 
             # Get all PV addresses with timeout to prevent indefinite blocking
             try:
@@ -92,7 +95,10 @@ async def run_snapshot_creation(
 
             # Call create_snapshot with progress callback
             data = NewSnapshotDTO(title=title, comment=comment)
-            result = await snapshot_service.create_snapshot(data, progress_callback=progress_update)
+            if use_cache:
+                result = await snapshot_service.create_snapshot_from_cache(data, progress_callback=progress_update)
+            else:
+                result = await snapshot_service.create_snapshot(data, progress_callback=progress_update)
 
             # Mark as completed with the snapshot ID as result
             await job_repo.mark_completed(
@@ -118,11 +124,12 @@ async def run_snapshot_creation(
 def schedule_snapshot_creation(
     job_id: str,
     title: str,
-    comment: str | None = None
+    comment: str | None = None,
+    use_cache: bool = True
 ) -> None:
     """
     Schedule a snapshot creation task to run in the background.
 
     This creates a new asyncio task that will run independently.
     """
-    asyncio.create_task(run_snapshot_creation(job_id, title, comment))
+    asyncio.create_task(run_snapshot_creation(job_id, title, comment, use_cache))

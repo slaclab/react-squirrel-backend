@@ -1,4 +1,4 @@
 # Test Mocks package
-from tests.mocks.epics_mock import MockEpicsService, MockEpicsValue
+from tests.mocks.epics_mock import MockEpicsService
 
-__all__ = ["MockEpicsService", "MockEpicsValue"]
+__all__ = ["MockEpicsService"]

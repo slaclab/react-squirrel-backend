@@ -13,15 +13,21 @@ class Settings(BaseSettings):
     database_pool_size: int = 30
     database_max_overflow: int = 20
 
-    # EPICS configuration
+    # EPICS configuration (simplified for aioca)
     epics_ca_addr_list: str = ""
     epics_ca_auto_addr_list: str = "YES"
-    epics_ca_conn_timeout: float = 3.0  # Connection timeout (increased for better capture)
-    epics_ca_timeout: float = 5.0  # Read timeout
-    epics_max_workers: int = 8  # Workers for parallel operations
-    epics_chunk_size: int = 100  # Chunk size for progress updates
-    epics_use_threading: bool = True  # Use threading instead of multiprocessing
-    epics_backend: str = "pyepics"  # "pyepics" or "p4p" - p4p may be faster for large batches
+    epics_ca_server_port: str = "5068"
+    epics_ca_repeater_port: str = "5069"
+    epics_ca_conn_timeout: float = 5.0  # Connection timeout
+    epics_ca_timeout: float = 10.0  # Read timeout (includes connection time for batch reads)
+    epics_chunk_size: int = 1000  # Batch size for progress updates (smaller for better connection handling)
+
+    # Redis configuration
+    redis_url: str = "redis://localhost:6379/0"
+    redis_pv_cache_ttl: int = 60  # seconds
+    redis_pv_hash_key: str = "squirrel:pv:values"
+    redis_pv_metadata_key: str = "squirrel:pv:metadata"
+    redis_pv_updates_channel: str = "squirrel:pv:updates"
 
     # Performance
     bulk_insert_batch_size: int = 5000
@@ -29,6 +35,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_prefix = "SQUIRREL_"
+        extra = "ignore"  # Ignore deprecated env vars from old config
 
 
 @lru_cache
