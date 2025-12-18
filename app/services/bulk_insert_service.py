@@ -1,3 +1,5 @@
+import io
+import json
 import logging
 from typing import Any
 import asyncpg
@@ -24,10 +26,21 @@ class BulkInsertService:
 
     async def connect(self) -> None:
         """Create asyncpg connection pool."""
+
+        async def init_connection(conn):
+            """Initialize connection with JSON codec for JSONB columns."""
+            await conn.set_type_codec(
+                'jsonb',
+                encoder=json.dumps,
+                decoder=json.loads,
+                schema='pg_catalog'
+            )
+
         self._pool = await asyncpg.create_pool(
             self._get_asyncpg_url(),
             min_size=2,
-            max_size=10
+            max_size=10,
+            init=init_connection
         )
         logger.info("BulkInsertService connected to PostgreSQL")
 
@@ -59,22 +72,30 @@ class BulkInsertService:
             return 0
 
         async with self._pool.acquire() as conn:
-            # Use copy_records_to_table for maximum performance
-            result = await conn.copy_records_to_table(
-                'snapshot_value',
-                records=values,
-                columns=[
-                    'id',
-                    'snapshot_id',
-                    'pv_id',
-                    'pv_name',
-                    'setpoint_value',
-                    'readback_value',
-                    'status',
-                    'severity',
-                    'timestamp'
-                ]
+            # Convert dicts to JSON strings for JSONB columns
+            # asyncpg executemany handles parameters correctly
+            processed_values = []
+            for row in values:
+                processed_row = list(row)
+                # Convert JSONB columns (indices 4, 5) from dict to JSON string
+                if processed_row[4] is not None:
+                    processed_row[4] = json.dumps(processed_row[4])
+                if processed_row[5] is not None:
+                    processed_row[5] = json.dumps(processed_row[5])
+                processed_values.append(tuple(processed_row))
+
+            # Use executemany for reliable insertion with proper type handling
+            await conn.executemany(
+                """
+                INSERT INTO snapshot_value
+                    (id, snapshot_id, pv_id, pv_name, setpoint_value, readback_value, status, severity, timestamp)
+                VALUES
+                    ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9)
+                """,
+                processed_values
             )
+
+            result = f"COPY {len(processed_values)}"
 
             # result is a string like "COPY 40000"
             count = int(result.split()[1]) if result else len(values)

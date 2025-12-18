@@ -7,7 +7,7 @@ from app.services.pv_service import PVService
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
 from app.repositories.pv_repository import PVRepository
-from app.schemas.pv import NewPVElementDTO, UpdatePVElementDTO, PVElementDTO
+from app.schemas.pv import NewPVElementDTO, UpdatePVElementDTO, PVElementDTO, LivePVRequest
 from app.schemas.common import PagedResult
 from app.api.responses import success_response, APIException
 
@@ -170,7 +170,22 @@ async def get_live_values(
     """Get current values from Redis cache (instant)."""
     try:
         redis = get_redis_service()
-        values = await redis.get_pv_values_bulk(pv_names)
+        entries = await redis.get_pv_values_bulk(pv_names)
+        # Convert PVCacheEntry objects to dicts for JSON serialization
+        values = {pv_name: entry.to_dict() for pv_name, entry in entries.items()}
+        return success_response(values)
+    except Exception as e:
+        raise APIException(500, f"Failed to get live values: {e}", 500)
+
+
+@router.post("/live", response_model=dict)
+async def get_live_values_post(request: LivePVRequest):
+    """Get current values from Redis cache (instant) - POST version for large PV lists."""
+    try:
+        redis = get_redis_service()
+        entries = await redis.get_pv_values_bulk(request.pv_names)
+        # Convert PVCacheEntry objects to dicts for JSON serialization
+        values = {pv_name: entry.to_dict() for pv_name, entry in entries.items()}
         return success_response(values)
     except Exception as e:
         raise APIException(500, f"Failed to get live values: {e}", 500)
@@ -181,7 +196,7 @@ async def get_all_live_values():
     """Get all cached PV values (for initial table load)."""
     try:
         redis = get_redis_service()
-        values = await redis.get_all_pv_values()
+        values = await redis.get_all_pv_values_as_dict()
         return success_response({
             "values": values,
             "count": len(values)

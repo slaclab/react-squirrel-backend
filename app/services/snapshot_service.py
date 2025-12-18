@@ -1,9 +1,28 @@
+import json
 import logging
 import math
 from datetime import datetime
 from typing import Any, Callable, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def _parse_jsonb(value: Any) -> dict | None:
+    """
+    Parse a JSONB value that might be a string or dict.
+
+    SQLAlchemy sometimes returns JSONB as strings depending on driver config.
+    """
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
 
 
 def _sanitize_for_json(value: Any) -> Any:
@@ -36,7 +55,7 @@ from app.services.epics_service import EpicsService, EpicsValue
 from app.services.redis_service import RedisService
 from app.schemas.snapshot import (
     NewSnapshotDTO, SnapshotDTO, SnapshotSummaryDTO, PVValueDTO, EpicsValueDTO,
-    RestoreRequestDTO, RestoreResultDTO, ComparisonResultDTO
+    RestoreRequestDTO, RestoreResultDTO, ComparisonResultDTO, TagInfoDTO
 )
 
 logger = logging.getLogger(__name__)
@@ -73,20 +92,27 @@ class SnapshotService:
             lower_ctrl_limit=epics_val.lower_ctrl_limit
         )
 
-    async def list_snapshots(self, title: str | None = None) -> list[SnapshotSummaryDTO]:
-        """List all snapshots."""
-        snapshots = await self.snapshot_repo.search(title=title)
+    async def list_snapshots(
+        self,
+        title: str | None = None,
+        tag_ids: list[str] | None = None
+    ) -> list[SnapshotSummaryDTO]:
+        """List all snapshots, optionally filtered by title and/or tags."""
+        snapshots = await self.snapshot_repo.search(title=title, tag_ids=tag_ids)
+
+        # Get all counts in a single query to avoid N+1 problem
+        snapshot_ids = [snap.id for snap in snapshots]
+        counts = await self.snapshot_repo.get_value_counts_batch(snapshot_ids)
 
         result = []
         for snap in snapshots:
-            count = await self.snapshot_repo.get_value_count(snap.id)
             result.append(SnapshotSummaryDTO(
                 id=snap.id,
                 title=snap.title,
                 comment=snap.comment,
                 createdDate=snap.created_at,
                 createdBy=snap.created_by,
-                pvCount=count
+                pvCount=counts.get(snap.id, 0)
             ))
         return result
 
@@ -111,18 +137,37 @@ class SnapshotService:
         # Get total count for pvCount (even when paginated)
         total_count = await self.value_repo.count_by_snapshot(snapshot_id)
 
-        pv_values = [
-            PVValueDTO(
+        # Get PV IDs to fetch tags and addresses
+        pv_ids = [v.pv_id for v in snapshot.values]
+        pvs_with_tags = await self.pv_repo.get_by_ids(pv_ids)
+        pv_tag_map: dict[str, list[TagInfoDTO]] = {}
+        pv_address_map: dict[str, tuple[str | None, str | None]] = {}  # pv_id -> (setpoint, readback)
+        for pv in pvs_with_tags:
+            pv_tag_map[pv.id] = [
+                TagInfoDTO(id=tag.id, name=tag.name, groupName=tag.group.name)
+                for tag in pv.tags
+            ]
+            pv_address_map[pv.id] = (pv.setpoint_address, pv.readback_address)
+
+        pv_values = []
+        for v in snapshot.values:
+            # Parse JSONB values (may be strings or dicts depending on driver)
+            setpoint_data = _parse_jsonb(v.setpoint_value)
+            readback_data = _parse_jsonb(v.readback_value)
+            setpoint_addr, readback_addr = pv_address_map.get(v.pv_id, (None, None))
+
+            pv_values.append(PVValueDTO(
                 pvId=v.pv_id,
                 pvName=v.pv_name,
-                setpointValue=EpicsValueDTO(**v.setpoint_value) if v.setpoint_value else None,
-                readbackValue=EpicsValueDTO(**v.readback_value) if v.readback_value else None,
+                setpointName=setpoint_addr,
+                readbackName=readback_addr,
+                setpointValue=EpicsValueDTO(**setpoint_data) if setpoint_data else None,
+                readbackValue=EpicsValueDTO(**readback_data) if readback_data else None,
                 status=v.status,
                 severity=v.severity,
-                timestamp=v.timestamp
-            )
-            for v in snapshot.values
-        ]
+                timestamp=v.timestamp,
+                tags=pv_tag_map.get(v.pv_id, [])
+            ))
 
         return SnapshotDTO(
             id=snapshot.id,
@@ -303,8 +348,8 @@ class SnapshotService:
             if progress_callback:
                 await progress_callback(0, len(pv_addresses), "Reading from cache...")
 
-            # Get all cached values from Redis (O(1) per value)
-            cached_values = await self.redis.get_all_pv_values()
+            # Get all cached values from Redis as dicts (O(1) per value)
+            cached_values = await self.redis.get_all_pv_values_as_dict()
             logger.info(f"Retrieved {len(cached_values)} cached values from Redis")
 
             # Check cache coverage
@@ -322,17 +367,43 @@ class SnapshotService:
                 created_by=created_by
             )
             snapshot = await self.snapshot_repo.create(snapshot)
+            # CRITICAL: Commit the snapshot before bulk insert
+            # bulk_create_fast uses asyncpg (different connection), so the snapshot
+            # must be committed to satisfy foreign key constraints
+            await self.session.commit()
 
             # Build snapshot values from cache
             snapshot_values_data = []
+
+            # Debug: log sample of cache keys and PV addresses
+            sample_cache_keys = list(cached_values.keys())[:5]
+            logger.info(f"Sample cache keys: {sample_cache_keys}")
+            sample_pv_addrs = [(sp, rb) for _, sp, rb, _ in pv_addresses[:5]]
+            logger.info(f"Sample PV addresses (setpoint, readback): {sample_pv_addrs}")
+
+            matched_setpoints = 0
+            matched_readbacks = 0
+            connected_setpoints = 0
+            connected_readbacks = 0
 
             for pv_id, setpoint_addr, readback_addr, config_addr in pv_addresses:
                 setpoint_cached = cached_values.get(setpoint_addr) if setpoint_addr else None
                 readback_cached = cached_values.get(readback_addr) if readback_addr else None
 
+                if setpoint_cached:
+                    matched_setpoints += 1
+                    if setpoint_cached.get("connected"):
+                        connected_setpoints += 1
+                if readback_cached:
+                    matched_readbacks += 1
+                    if readback_cached.get("connected"):
+                        connected_readbacks += 1
+
                 # Build setpoint value dict
+                # Note: We save the cached value even if disconnected - the last known value
+                # is still valid data. The "connected" status is for live monitoring, not snapshots.
                 setpoint_value = None
-                if setpoint_cached and setpoint_cached.get("connected"):
+                if setpoint_cached and setpoint_cached.get("value") is not None:
                     setpoint_value = {
                         "value": _sanitize_for_json(setpoint_cached.get("value")),
                         "status": setpoint_cached.get("status"),
@@ -342,7 +413,7 @@ class SnapshotService:
 
                 # Build readback value dict
                 readback_value = None
-                if readback_cached and readback_cached.get("connected"):
+                if readback_cached and readback_cached.get("value") is not None:
                     readback_value = {
                         "value": _sanitize_for_json(readback_cached.get("value")),
                         "status": readback_cached.get("status"),
@@ -359,6 +430,18 @@ class SnapshotService:
                     "severity": setpoint_cached.get("severity") if setpoint_cached else None,
                     "timestamp": datetime.now(),
                 })
+
+            # Debug summary - note: we now save values even if disconnected
+            logger.info(f"Cache matching results: "
+                       f"setpoints matched={matched_setpoints}/{len(pv_addresses)} (connected={connected_setpoints}), "
+                       f"readbacks matched={matched_readbacks}/{len(pv_addresses)} (connected={connected_readbacks})")
+
+            # Debug: count how many values have non-null setpoint/readback
+            with_setpoint = sum(1 for v in snapshot_values_data if v.get("setpoint_value") is not None)
+            with_readback = sum(1 for v in snapshot_values_data if v.get("readback_value") is not None)
+            logger.info(f"Values to save: {len(snapshot_values_data)} total, {with_setpoint} with setpoint, {with_readback} with readback")
+            if snapshot_values_data:
+                logger.info(f"Sample value to save: {snapshot_values_data[0]}")
 
             if progress_callback:
                 await progress_callback(
@@ -428,7 +511,8 @@ class SnapshotService:
             if not pv or pv.read_only:
                 continue
             if pv.setpoint_address and val.setpoint_value:
-                write_value = val.setpoint_value.get("value")
+                setpoint_data = _parse_jsonb(val.setpoint_value)
+                write_value = setpoint_data.get("value") if setpoint_data else None
                 if write_value is not None:
                     values_to_write[pv.setpoint_address] = write_value
                     pv_id_by_address[pv.setpoint_address] = pv.id
@@ -494,8 +578,11 @@ class SnapshotService:
             val2 = values2.get(pv_id)
             pv = pv_map.get(pv_id)
 
-            v1 = val1.setpoint_value.get("value") if val1 and val1.setpoint_value else None
-            v2 = val2.setpoint_value.get("value") if val2 and val2.setpoint_value else None
+            # Parse JSONB values (may be strings or dicts depending on driver)
+            setpoint1 = _parse_jsonb(val1.setpoint_value) if val1 else None
+            setpoint2 = _parse_jsonb(val2.setpoint_value) if val2 else None
+            v1 = setpoint1.get("value") if setpoint1 else None
+            v2 = setpoint2.get("value") if setpoint2 else None
 
             # Check if within tolerance
             within_tolerance = self._values_within_tolerance(

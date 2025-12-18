@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 
 class EpicsValueDTO(BaseModel):
     """EPICS value with metadata."""
+    model_config = {"extra": "ignore"}  # Ignore extra fields from JSONB
+
     value: Any
     status: int | None = None
     severity: int | None = None
@@ -15,15 +17,25 @@ class EpicsValueDTO(BaseModel):
     lower_ctrl_limit: float | None = None
 
 
+class TagInfoDTO(BaseModel):
+    """Lightweight tag info for PV values."""
+    id: str
+    name: str
+    groupName: str
+
+
 class PVValueDTO(BaseModel):
     """PV value in a snapshot."""
     pvId: str
-    pvName: str
+    pvName: str  # Primary name (setpoint or readback)
+    setpointName: str | None = None  # Actual setpoint PV address
+    readbackName: str | None = None  # Actual readback PV address
     setpointValue: EpicsValueDTO | None = None
     readbackValue: EpicsValueDTO | None = None
     status: int | None = None
     severity: int | None = None
     timestamp: datetime | None = None
+    tags: list[TagInfoDTO] = []
 
 
 class SnapshotBase(BaseModel):

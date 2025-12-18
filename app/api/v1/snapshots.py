@@ -21,12 +21,13 @@ router = APIRouter(prefix="/snapshots", tags=["Snapshots"])
 @router.get("", response_model=dict)
 async def list_snapshots(
     title: str | None = Query(None),
+    tags: list[str] | None = Query(None, description="Filter by tag IDs (returns snapshots containing PVs with any of these tags)"),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all snapshots."""
+    """List all snapshots, optionally filtered by title and/or tags."""
     epics = get_epics_service()
     service = SnapshotService(db, epics)
-    snapshots = await service.list_snapshots(title=title)
+    snapshots = await service.list_snapshots(title=title, tag_ids=tags)
     return success_response(snapshots)
 
 

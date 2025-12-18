@@ -28,6 +28,22 @@ class Settings(BaseSettings):
     redis_pv_hash_key: str = "squirrel:pv:values"
     redis_pv_metadata_key: str = "squirrel:pv:metadata"
     redis_pv_updates_channel: str = "squirrel:pv:updates"
+    redis_heartbeat_key: str = "squirrel:monitor:heartbeat"
+    redis_disconnected_set_key: str = "squirrel:pv:disconnected"
+
+    # PV Monitor - Batched startup to prevent UDP flood
+    pv_monitor_batch_size: int = 500  # PVs per batch during startup
+    pv_monitor_batch_delay_ms: int = 100  # Delay between batches (ms)
+    pv_monitor_heartbeat_interval: float = 1.0  # Heartbeat update interval (seconds)
+
+    # Watchdog - Health monitoring
+    watchdog_enabled: bool = True
+    watchdog_check_interval: float = 60.0  # How often to run health checks (seconds)
+    watchdog_stale_threshold: float = 300.0  # PV considered stale if no update in X seconds
+    watchdog_reconnect_timeout: float = 2.0  # Timeout for reconnection attempts
+
+    # WebSocket - Diff streaming
+    websocket_batch_interval_ms: int = 100  # Buffer updates for X ms before sending
 
     # Performance
     bulk_insert_batch_size: int = 5000

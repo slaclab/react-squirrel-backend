@@ -47,3 +47,8 @@ class PVElementDTO(PVBase):
 
     class Config:
         from_attributes = True
+
+
+class LivePVRequest(BaseModel):
+    """DTO for requesting live PV values via POST."""
+    pv_names: list[str] = Field(..., description="List of PV names to fetch")

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.pv import PV
-from app.models.tag import Tag
+from app.models.tag import Tag, TagGroup
 from app.repositories.base import BaseRepository
 
 
@@ -18,7 +18,7 @@ class PVRepository(BaseRepository[PV]):
         """Find PV by any address (setpoint, readback, or config)."""
         result = await self.session.execute(
             select(PV)
-            .options(selectinload(PV.tags))
+            .options(selectinload(PV.tags).selectinload(Tag.group))
             .where(
                 or_(
                     PV.setpoint_address == address,
@@ -41,7 +41,7 @@ class PVRepository(BaseRepository[PV]):
         Returns: (results, next_token, total_count)
         """
         # Build base query
-        query = select(PV).options(selectinload(PV.tags))
+        query = select(PV).options(selectinload(PV.tags).selectinload(Tag.group))
         count_query = select(func.count()).select_from(PV)
 
         # Apply search filter
@@ -95,13 +95,28 @@ class PVRepository(BaseRepository[PV]):
         return pvs
 
     async def get_by_ids(self, ids: list[str]) -> list[PV]:
-        """Get multiple PVs by ID."""
-        result = await self.session.execute(
-            select(PV)
-            .options(selectinload(PV.tags))
-            .where(PV.id.in_(ids))
-        )
-        return list(result.scalars().all())
+        """
+        Get multiple PVs by ID.
+
+        Batches queries to avoid PostgreSQL's 32,767 parameter limit.
+        """
+        if not ids:
+            return []
+
+        # PostgreSQL limit is 32767 parameters, use 30000 to be safe
+        batch_size = 30000
+        all_pvs = []
+
+        for i in range(0, len(ids), batch_size):
+            batch_ids = ids[i:i + batch_size]
+            result = await self.session.execute(
+                select(PV)
+                .options(selectinload(PV.tags).selectinload(Tag.group))
+                .where(PV.id.in_(batch_ids))
+            )
+            all_pvs.extend(result.scalars().all())
+
+        return all_pvs
 
     async def search_filtered(
         self,
@@ -116,7 +131,7 @@ class PVRepository(BaseRepository[PV]):
 
         Returns (results, total_count).
         """
-        query = select(PV).options(selectinload(PV.tags))
+        query = select(PV).options(selectinload(PV.tags).selectinload(Tag.group))
         count_query = select(func.count()).select_from(PV)
 
         # Apply search filter
@@ -164,7 +179,7 @@ class PVRepository(BaseRepository[PV]):
     async def get_all_as_map(self) -> dict[str, "PV"]:
         """Get all PVs as a dictionary keyed by ID."""
         result = await self.session.execute(
-            select(PV).options(selectinload(PV.tags))
+            select(PV).options(selectinload(PV.tags).selectinload(Tag.group))
         )
         pvs = result.scalars().all()
         return {pv.id: pv for pv in pvs}

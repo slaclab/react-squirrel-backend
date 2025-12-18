@@ -37,7 +37,7 @@ class Tag(Base, UUIDMixin, TimestampMixin):
     )
 
     # Relationships
-    group: Mapped["TagGroup"] = relationship("TagGroup", back_populates="tags")
+    group: Mapped["TagGroup"] = relationship("TagGroup", back_populates="tags", lazy="selectin")
     pvs: Mapped[List["PV"]] = relationship(
         "PV",
         secondary="pv_tag",

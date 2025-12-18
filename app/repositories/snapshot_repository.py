@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.snapshot import Snapshot, SnapshotValue
+from app.models.pv import pv_tag
 from app.repositories.base import BaseRepository
 
 # Chunk size for bulk inserts to prevent blocking event loop
@@ -60,13 +61,31 @@ class SnapshotRepository(BaseRepository[Snapshot]):
     async def search(
         self,
         title: str | None = None,
+        tag_ids: list[str] | None = None,
         limit: int = 100
     ) -> list[Snapshot]:
-        """Search snapshots by title."""
+        """Search snapshots by title and/or tags.
+
+        Args:
+            title: Optional title filter (case-insensitive contains)
+            tag_ids: Optional list of tag IDs - returns snapshots containing PVs with ANY of these tags
+            limit: Maximum number of results
+        """
         query = select(Snapshot)
 
         if title:
             query = query.where(Snapshot.title.ilike(f"%{title}%"))
+
+        if tag_ids:
+            # Find snapshots that contain PVs with any of the specified tags
+            # Subquery: get snapshot IDs that have PVs with matching tags
+            snapshot_ids_with_tags = (
+                select(SnapshotValue.snapshot_id)
+                .distinct()
+                .join(pv_tag, SnapshotValue.pv_id == pv_tag.c.pv_id)
+                .where(pv_tag.c.tag_id.in_(tag_ids))
+            )
+            query = query.where(Snapshot.id.in_(snapshot_ids_with_tags))
 
         query = query.order_by(Snapshot.created_at.desc()).limit(limit)
 
@@ -82,14 +101,31 @@ class SnapshotRepository(BaseRepository[Snapshot]):
         )
         return result.scalar() or 0
 
+    async def get_value_counts_batch(self, snapshot_ids: list[str]) -> dict[str, int]:
+        """Get counts of values for multiple snapshots in a single query."""
+        if not snapshot_ids:
+            return {}
+        result = await self.session.execute(
+            select(SnapshotValue.snapshot_id, func.count())
+            .where(SnapshotValue.snapshot_id.in_(snapshot_ids))
+            .group_by(SnapshotValue.snapshot_id)
+        )
+        return {row[0]: row[1] for row in result.all()}
+
     async def delete_with_values(self, snapshot_id: str) -> bool:
-        """Delete snapshot and all its values."""
-        snapshot = await self.get_by_id(snapshot_id)
-        if not snapshot:
+        """Delete snapshot and all its values using direct SQL for performance."""
+        # Check if snapshot exists first
+        result = await self.session.execute(
+            select(Snapshot.id).where(Snapshot.id == snapshot_id)
+        )
+        if not result.scalar_one_or_none():
             return False
 
-        # Cascade delete will handle values
-        await self.delete(snapshot)
+        # Delete snapshot directly - ON DELETE CASCADE handles values at DB level
+        await self.session.execute(
+            delete(Snapshot).where(Snapshot.id == snapshot_id)
+        )
+        await self.session.flush()
         return True
 
 
@@ -192,19 +228,16 @@ class SnapshotValueRepository(BaseRepository[SnapshotValue]):
         bulk_service = await get_bulk_insert_service()
 
         # Convert to tuples for COPY
+        # Pass dicts for JSONB columns - bulk service handles JSON serialization
         records = []
         for v in values:
-            # Serialize values to JSON strings for JSONB columns
-            setpoint_json = json.dumps(v.get("setpoint_value")) if v.get("setpoint_value") is not None else None
-            readback_json = json.dumps(v.get("readback_value")) if v.get("readback_value") is not None else None
-
             records.append((
                 str(uuid.uuid4()),
                 snapshot_id,
                 v["pv_id"],
                 v["pv_name"],
-                setpoint_json,
-                readback_json,
+                v.get("setpoint_value"),  # Dict - will be JSON serialized by bulk service
+                v.get("readback_value"),  # Dict - will be JSON serialized by bulk service
                 v.get("status"),
                 v.get("severity"),
                 v.get("timestamp"),
