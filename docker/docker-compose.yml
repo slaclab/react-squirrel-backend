@@ -29,17 +29,18 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
+  # API Server - REST/WebSocket, reads from Redis cache
+  api:
     build:
       context: ..
       dockerfile: docker/Dockerfile.dev
-    container_name: squirrel-backend
+    container_name: squirrel-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       SQUIRREL_DATABASE_URL: postgresql+asyncpg://squirrel:squirrel@db:5432/squirrel
+      SQUIRREL_REDIS_URL: redis://redis:6379/0
       SQUIRREL_DEBUG: "true"
       # EPICS environment for SLAC prod access from dev network
-      # Note: These vars are set but EPICS access requires running natively on macOS
-      # On Linux, uncomment network_mode: host below for EPICS access
       EPICS_CA_AUTO_ADDR_LIST: "NO"
       EPICS_CA_ADDR_LIST: "lcls-prod01:5068 lcls-prod01:5063 mcc-dmz"
       EPICS_CA_REPEATER_PORT: "5069"
@@ -58,9 +59,110 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     # For EPICS access on Linux, uncomment:
     # network_mode: host
-    # And change db:5432 to localhost:5432 in DATABASE_URL above
+
+  # PV Monitor - Dedicated process for EPICS monitoring, writes to Redis
+  monitor:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    container_name: squirrel-monitor
+    command: python -m app.monitor_main
+    environment:
+      SQUIRREL_DATABASE_URL: postgresql+asyncpg://squirrel:squirrel@db:5432/squirrel
+      SQUIRREL_REDIS_URL: redis://redis:6379/0
+      SQUIRREL_DEBUG: "true"
+      # EPICS environment
+      EPICS_CA_AUTO_ADDR_LIST: "NO"
+      EPICS_CA_ADDR_LIST: "lcls-prod01:5068 lcls-prod01:5063 mcc-dmz"
+      EPICS_CA_REPEATER_PORT: "5069"
+      EPICS_CA_SERVER_PORT: "5068"
+      EPICS_PVA_AUTO_ADDR_LIST: "NO"
+      EPICS_PVA_ADDR_LIST: "lcls-prod01:5168 lcls-prod01:5063 mcc-dmz mccas0.slac.stanford.edu"
+      EPICS_PVA_SERVER_PORT: "5075"
+      EPICS_PVA_BROADCAST_PORT: "5076"
+      EPICS_TS_NTP_INET: "134.79.48.11"
+      EPICS_IOC_LOG_INET: "134.79.151.21"
+    volumes:
+      - ../app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    # Only one monitor instance should run (leader election handles this)
+    deploy:
+      replicas: 1
+    # For EPICS access on Linux, uncomment:
+    # network_mode: host
+
+  # Arq Worker - Background task processing for snapshots
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    container_name: squirrel-worker
+    command: arq app.worker.WorkerSettings
+    environment:
+      SQUIRREL_DATABASE_URL: postgresql+asyncpg://squirrel:squirrel@db:5432/squirrel
+      SQUIRREL_REDIS_URL: redis://redis:6379/0
+      SQUIRREL_DEBUG: "true"
+      # EPICS environment (needed for snapshot restore)
+      EPICS_CA_AUTO_ADDR_LIST: "NO"
+      EPICS_CA_ADDR_LIST: "lcls-prod01:5068 lcls-prod01:5063 mcc-dmz"
+      EPICS_CA_REPEATER_PORT: "5069"
+      EPICS_CA_SERVER_PORT: "5068"
+    volumes:
+      - ../app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      replicas: 2  # Can scale workers independently
+
+  # Legacy backend alias (for backward compatibility)
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    container_name: squirrel-backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      SQUIRREL_DATABASE_URL: postgresql+asyncpg://squirrel:squirrel@db:5432/squirrel
+      SQUIRREL_REDIS_URL: redis://redis:6379/0
+      SQUIRREL_DEBUG: "true"
+      # Enable embedded monitor for backward compatibility
+      SQUIRREL_EMBEDDED_MONITOR: "true"
+      # EPICS environment
+      EPICS_CA_AUTO_ADDR_LIST: "NO"
+      EPICS_CA_ADDR_LIST: "lcls-prod01:5068 lcls-prod01:5063 mcc-dmz"
+      EPICS_CA_REPEATER_PORT: "5069"
+      EPICS_CA_SERVER_PORT: "5068"
+      EPICS_PVA_AUTO_ADDR_LIST: "NO"
+      EPICS_PVA_ADDR_LIST: "lcls-prod01:5168 lcls-prod01:5063 mcc-dmz mccas0.slac.stanford.edu"
+      EPICS_PVA_SERVER_PORT: "5075"
+      EPICS_PVA_BROADCAST_PORT: "5076"
+      EPICS_TS_NTP_INET: "134.79.48.11"
+      EPICS_IOC_LOG_INET: "134.79.151.21"
+    ports:
+      - "8001:8000"
+    volumes:
+      - ../app:/app/app
+      - ../tests:/app/tests
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles:
+      - legacy  # Only start with --profile legacy
 
 volumes:
   squirrel_db_data:

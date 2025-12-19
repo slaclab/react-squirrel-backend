@@ -481,6 +481,97 @@ class RedisService:
             "monitor_alive": heartbeat_age is not None and heartbeat_age < 5.0,
         }
 
+    # ============================================================
+    # Monitor Leader Election
+    # ============================================================
+
+    MONITOR_LOCK_KEY = "squirrel:monitor:lock"
+    MONITOR_LOCK_TTL = 30  # seconds
+
+    async def acquire_monitor_lock(self, instance_id: str) -> bool:
+        """
+        Acquire exclusive lock for monitor process (leader election).
+
+        Only one monitor instance should run at a time. This uses Redis
+        SET with NX (only set if not exists) for atomic leader election.
+
+        Args:
+            instance_id: Unique identifier for this monitor instance
+
+        Returns:
+            True if lock acquired, False if another instance holds it
+        """
+        if not self._redis:
+            raise RuntimeError("Redis not connected")
+
+        result = await self._redis.set(
+            self.MONITOR_LOCK_KEY,
+            instance_id,
+            nx=True,  # Only set if not exists
+            ex=self.MONITOR_LOCK_TTL  # Expire after TTL
+        )
+        return result is True
+
+    async def renew_monitor_lock(self, instance_id: str) -> bool:
+        """
+        Renew lock if we still own it.
+
+        Must be called periodically (< MONITOR_LOCK_TTL) to maintain leadership.
+
+        Args:
+            instance_id: Our instance ID to verify ownership
+
+        Returns:
+            True if renewed successfully, False if we lost leadership
+        """
+        if not self._redis:
+            raise RuntimeError("Redis not connected")
+
+        current = await self._redis.get(self.MONITOR_LOCK_KEY)
+        if current == instance_id:
+            await self._redis.expire(self.MONITOR_LOCK_KEY, self.MONITOR_LOCK_TTL)
+            return True
+        return False
+
+    async def release_monitor_lock(self, instance_id: str) -> bool:
+        """
+        Release the monitor lock if we own it.
+
+        Args:
+            instance_id: Our instance ID to verify ownership
+
+        Returns:
+            True if released, False if we didn't own it
+        """
+        if not self._redis:
+            raise RuntimeError("Redis not connected")
+
+        current = await self._redis.get(self.MONITOR_LOCK_KEY)
+        if current == instance_id:
+            await self._redis.delete(self.MONITOR_LOCK_KEY)
+            return True
+        return False
+
+    async def get_monitor_lock_holder(self) -> str | None:
+        """
+        Get the current monitor lock holder instance ID.
+
+        Returns:
+            Instance ID of current leader, or None if no leader
+        """
+        if not self._redis:
+            raise RuntimeError("Redis not connected")
+
+        return await self._redis.get(self.MONITOR_LOCK_KEY)
+
+    async def get_monitor_heartbeat(self) -> float | None:
+        """
+        Get the last monitor heartbeat timestamp.
+
+        Alias for get_heartbeat() for clearer API.
+        """
+        return await self.get_heartbeat()
+
 
 # Singleton instance
 _redis_service: RedisService | None = None
