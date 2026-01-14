@@ -78,6 +78,11 @@ cover/
 *.db
 *.sqlite3
 
+# Redis
+dump.rdb
+*.rdb
+appendonly.aof
+
 # Logs
 *.log
 
