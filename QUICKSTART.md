@@ -9,7 +9,21 @@ Get the backend running in 2 minutes!
 
 ## Option 1: Docker Compose (Fastest)
 
-Start everything with one command:
+### 1. Configure EPICS DNS (Docker Desktop on macOS/Windows only)
+
+If you need to connect to EPICS servers:
+
+```bash
+# Copy the example environment file
+cp docker/.env.example docker/.env
+
+# Edit docker/.env with your EPICS server IPs
+# Get IPs with: host <hostname>
+```
+
+**Linux users**: Skip this step and uncomment `network_mode: host` in `docker-compose.yml` instead.
+
+### 2. Start everything
 
 ```bash
 cd docker

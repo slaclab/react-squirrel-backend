@@ -382,6 +382,28 @@ All configuration is via environment variables (with `SQUIRREL_` prefix):
 
 See `.env.example` for a complete template.
 
+### Docker-Specific Configuration
+
+For Docker Desktop on macOS/Windows, configure EPICS server DNS mappings:
+
+```bash
+# Copy the example file
+cp docker/.env.example docker/.env
+
+# Edit with your EPICS server hostnames and IPs
+# Get IPs with: host <hostname>
+```
+
+Example `docker/.env`:
+```bash
+COMPOSE_PROJECT_NAME=squirrel
+
+EPICS_HOST_PROD=your-epics-server:xxx.xxx.xxx.xxx
+EPICS_HOST_DMZ=your-dmz-server:xxx.xxx.xxx.xxx
+```
+
+**Note**: `docker/.env` is gitignored and should contain your site-specific configuration.
+
 ---
 
 ## Docker Commands Reference

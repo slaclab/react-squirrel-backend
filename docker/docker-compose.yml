@@ -59,6 +59,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # DNS mapping for SLAC EPICS servers (configure in docker/.env)
+    extra_hosts:
+      - "${EPICS_HOST_PROD}"
+      - "${EPICS_HOST_DMZ}"
     # For EPICS access on Linux, uncomment:
     # network_mode: host
 
@@ -95,6 +99,10 @@ services:
     # Only one monitor instance should run (leader election handles this)
     deploy:
       replicas: 1
+    # DNS mapping for SLAC EPICS servers (configure in docker/.env)
+    extra_hosts:
+      - "${EPICS_HOST_PROD}"
+      - "${EPICS_HOST_DMZ}"
     # For EPICS access on Linux, uncomment:
     # network_mode: host
 
@@ -123,6 +131,10 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    # DNS mapping for SLAC EPICS servers (needed for snapshot restore)
+    extra_hosts:
+      - "lcls-prod01:134.79.151.21"
+      - "mcc-dmz:134.79.151.11"
     deploy:
       replicas: 2  # Can scale workers independently
 
