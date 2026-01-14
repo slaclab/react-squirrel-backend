@@ -38,7 +38,7 @@ cd react-squirrel-backend
 
 # Start the full stack
 cd docker
-docker-compose up --build
+docker-compose up -d --build
 ```
 
 This starts:
