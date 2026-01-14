@@ -34,7 +34,7 @@ The easiest way to get started is using Docker Compose, which sets up both the d
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd squirrel-backend
+cd react-squirrel-backend
 
 # Start the full stack
 cd docker
