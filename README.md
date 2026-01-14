@@ -32,6 +32,8 @@ High-performance Python FastAPI backend for EPICS control system snapshot/restor
 
 ## Quick Start
 
+**New here?** See [QUICKSTART.md](QUICKSTART.md) for a 2-minute setup guide!
+
 ### Option 1: Docker Compose (Recommended)
 
 The easiest way to get started with the full distributed architecture:
@@ -52,23 +54,26 @@ docker exec squirrel-api alembic upgrade head
 This starts:
 - **PostgreSQL** on port `5432`
 - **Redis** on port `6379`
-- **API Server** on port `8000` (REST/WebSocket)
+- **API Server** on port `8080` (REST/WebSocket)
 - **PV Monitor** (1 replica) - EPICS monitoring process
 - **Workers** (2 replicas) - Background task processors
 
+The Docker Compose project is named **`squirrel`**, so containers are:
+- `squirrel-api`, `squirrel-db`, `squirrel-redis`, `squirrel-monitor`, `squirrel-worker-1`, `squirrel-worker-2`
+
 The API will be available at:
-- **API**: http://localhost:8000
-- **Swagger Docs**: http://localhost:8000/docs
-- **Health Check**: http://localhost:8000/v1/health
+- **API**: http://localhost:8080
+- **Swagger Docs**: http://localhost:8080/docs
+- **Health Check**: http://localhost:8080/v1/health/summary
 
 To stop the services:
 ```bash
-docker-compose down
+docker compose down
 ```
 
 To reset the database (delete all data):
 ```bash
-docker-compose down -v
+docker compose down -v
 ```
 
 ### Option 2: Legacy Mode (Single Process)
@@ -77,10 +82,15 @@ For simpler deployments with embedded PV monitoring:
 
 ```bash
 cd docker
-docker-compose --profile legacy up backend db redis
+docker compose --profile legacy up backend db redis
 ```
 
 This runs the API with embedded PV monitor on port `8001`.
+
+**Note**: Workers are still required for snapshot creation. Start them separately:
+```bash
+docker compose up -d worker
+```
 
 ### Option 3: Local Development
 
@@ -89,9 +99,9 @@ Run infrastructure in Docker, services locally for faster development:
 ```bash
 # 1. Start PostgreSQL and Redis
 cd docker
-docker-compose up -d db redis
+docker compose up -d db redis
 
-# 2. Set up Python environment
+# 2. Set up Python environment (or run ./setup.sh)
 cd ..
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -99,16 +109,24 @@ pip install -e ".[dev]"
 
 # 3. Configure environment
 cp .env.example .env
-# Edit .env if needed (defaults work with docker-compose)
+# Edit .env if needed (defaults work with docker compose)
 
 # 4. Run database migrations
 alembic upgrade head
 
-# 5. Start services (in separate terminals)
+# 5. (Optional) Load test data
+python -m scripts.seed_pvs --count 100
+
+# 6. Start services (in separate terminals)
 uvicorn app.main:app --reload --port 8000      # API Server
 python -m app.monitor_main                      # PV Monitor
-arq app.worker.WorkerSettings                   # Background Worker
+arq app.worker.WorkerSettings                   # Worker (REQUIRED for snapshots)
 ```
+
+**Important**: All three services must be running for full functionality:
+- **API**: Handles HTTP/WebSocket requests
+- **Monitor**: Maintains Redis cache of live PV values
+- **Worker**: Processes background jobs (snapshot creation/restore)
 
 ---
 
@@ -371,27 +389,27 @@ See `.env.example` for a complete template.
 ```bash
 # Start all services
 cd docker
-docker-compose up
+docker compose up
 
 # Start in background (detached)
-docker-compose up -d
+docker compose up -d
 
 # Rebuild images after code changes
-docker-compose up --build
+docker compose up --build
 
 # View logs
-docker-compose logs -f api
-docker-compose logs -f monitor
-docker-compose logs -f worker
+docker compose logs -f api
+docker compose logs -f monitor
+docker compose logs -f worker
 
 # Stop services
-docker-compose down
+docker compose down
 
 # Stop and remove volumes (reset database)
-docker-compose down -v
+docker compose down -v
 
-# Scale workers
-docker-compose up -d --scale worker=4
+# Scale workers (for high load)
+docker compose up -d --scale worker=4
 
 # Execute command in running container
 docker exec -it squirrel-api bash
@@ -399,6 +417,9 @@ docker exec -it squirrel-db psql -U squirrel
 
 # Run migrations in Docker
 docker exec -it squirrel-api alembic upgrade head
+
+# Load test data in Docker
+docker compose exec api python -m scripts.seed_pvs --count 100
 ```
 
 ---
@@ -408,7 +429,13 @@ docker exec -it squirrel-api alembic upgrade head
 ### Database connection refused
 ```bash
 # Check if PostgreSQL is running
-docker-compose ps
+docker compose ps db
+
+# Check database health
+docker compose logs db
+
+# Test connection
+docker exec -it squirrel-db pg_isready -U squirrel
 # Or for local: pg_isready -h localhost -p 5432
 ```
 
@@ -439,21 +466,36 @@ curl http://localhost:8000/v1/health/monitor/status
 docker exec -it squirrel-redis redis-cli GET squirrel:monitor:heartbeat
 ```
 
-### Jobs stuck in RUNNING
+### Snapshots hanging or have no data
 ```bash
-# Check worker logs
-docker-compose logs -f worker
+# Check if worker is running
+docker compose ps worker
 
-# Check Arq queue
+# If not running, start it
+docker compose up -d worker
+
+# Check worker logs
+docker compose logs -f worker
+
+# Verify worker is processing jobs
 docker exec -it squirrel-redis redis-cli LLEN arq:queue
 ```
 
+**Note**: Snapshots will be empty if:
+- Test PVs don't exist on EPICS network (expected for development)
+- Monitor can't connect to PVs (check EPICS_CA_ADDR_LIST)
+- Redis cache is empty and direct EPICS reads fail
+
 ### Port already in use
 ```bash
-# Find process using port 8000
-lsof -i :8000
+# Find process using port 8080 (Docker) or 8000 (local)
+lsof -i :8080
 
-# Use different port
+# Change Docker port in docker-compose.yml:
+# ports:
+#   - "8081:8000"  # Change 8080 to 8081
+
+# Or use different port locally
 uvicorn app.main:app --reload --port 8001
 ```
 

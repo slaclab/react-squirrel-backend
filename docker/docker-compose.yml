@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:16-alpine
@@ -52,7 +50,7 @@ services:
       EPICS_TS_NTP_INET: "134.79.48.11"
       EPICS_IOC_LOG_INET: "134.79.151.21"
     ports:
-      - "8000:8000"
+      - "8080:8000"
     volumes:
       - ../app:/app/app
       - ../tests:/app/tests
@@ -105,7 +103,8 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.dev
-    container_name: squirrel-worker
+    # Remove container_name when using replicas
+    # container_name: squirrel-worker
     command: arq app.worker.WorkerSettings
     environment:
       SQUIRREL_DATABASE_URL: postgresql+asyncpg://squirrel:squirrel@db:5432/squirrel

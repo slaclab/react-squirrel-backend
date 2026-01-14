@@ -119,6 +119,7 @@ async def main():
         return
 
     # Start PV monitoring (with batched startup)
+    # Always start the monitor (for heartbeat) even if no PVs
     if pv_addresses:
         logger.info(
             f"Starting PV Monitor for {len(pv_addresses)} unique addresses "
@@ -128,7 +129,8 @@ async def main():
         await pv_monitor.start(list(pv_addresses))
         logger.info(f"PV Monitor started for {len(pv_addresses)} unique addresses")
     else:
-        logger.warning("No PV addresses found in database - PV Monitor running but idle")
+        logger.warning("No PV addresses found in database - starting PV Monitor in idle mode for heartbeat")
+        await pv_monitor.start([])  # Start with empty list to initialize heartbeat
 
     # Start Watchdog if enabled
     watchdog = None

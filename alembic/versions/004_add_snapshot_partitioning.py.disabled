@@ -1,7 +1,7 @@
 """Add snapshot_value table partitioning
 
 Revision ID: 004
-Revises: 003_add_performance_indexes
+Revises: 003_perf_indexes
 Create Date: 2024-12-19
 
 This migration converts the snapshot_value table to use PostgreSQL native
@@ -27,7 +27,7 @@ import sqlalchemy as sa
 
 # revision identifiers
 revision = '004'
-down_revision = '003_add_performance_indexes'
+down_revision = '003_perf_indexes'
 branch_labels = None
 depends_on = None
 

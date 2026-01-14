@@ -225,24 +225,26 @@ async def get_health_summary():
         pv_monitor = get_pv_monitor()
         watchdog = get_watchdog()
 
-        # Check heartbeat
+        # Check heartbeat (monitor process health)
         heartbeat_age = await redis.get_heartbeat_age()
         monitor_alive = heartbeat_age is not None and heartbeat_age < 5.0
 
         if not monitor_alive:
             issues.append("Monitor heartbeat is stale or missing")
 
-        # Check monitor running
-        if not pv_monitor.is_running():
-            issues.append("PV Monitor is not running")
-
-        # Check watchdog running
-        watchdog_running = watchdog.is_running()
-        if not watchdog_running:
-            issues.append("Watchdog is not running")
-
-        # Get connection stats
+        # Get connection stats from Redis
         health_stats = await redis.get_health_stats()
+
+        # Check if monitor is actually running based on PV count in Redis
+        # (In distributed setup, monitor runs in separate container)
+        pv_monitor_running = health_stats.get("total_cached_pvs", 0) > 0 or monitor_alive
+
+        # For backwards compatibility, check local instance too (embedded mode)
+        pv_monitor = get_pv_monitor()
+        watchdog = get_watchdog()
+        if pv_monitor.is_running():
+            pv_monitor_running = True
+        watchdog_running = watchdog.is_running()
         total_pvs = health_stats["total_cached_pvs"]
         connected_pvs = health_stats["connected_pvs"]
         disconnected_pvs = health_stats["disconnected_pvs"]
@@ -259,7 +261,7 @@ async def get_health_summary():
         watchdog_stats = watchdog.get_stats()
 
         # Determine overall status
-        if not monitor_alive or not pv_monitor.is_running():
+        if not monitor_alive:
             status = "unhealthy"
         elif disconnected_pct > 10 or len(issues) > 2:
             status = "degraded"
