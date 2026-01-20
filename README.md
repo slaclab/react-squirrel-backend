@@ -39,6 +39,9 @@ cd react-squirrel-backend
 # Start the full stack
 cd docker
 docker-compose up -d --build
+
+# Configure the database
+docker exec squirrel-api alembic upgrade head
 ```
 
 This starts:
