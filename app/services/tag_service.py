@@ -121,7 +121,8 @@ class TagService:
         )
         await self.tag_repo.create(tag)
 
-        # Refresh group to get updated tags
+        # Expire cached group and refresh to get updated tags
+        self.group_repo.session.expire(group)
         group = await self.group_repo.get_with_tags(group_id)
 
         return TagGroupDTO(
