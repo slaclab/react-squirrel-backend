@@ -34,11 +34,14 @@ The easiest way to get started is using Docker Compose, which sets up both the d
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd squirrel-backend
+cd react-squirrel-backend
 
 # Start the full stack
 cd docker
-docker-compose up --build
+docker-compose up -d --build
+
+# Configure the database
+docker exec squirrel-api alembic upgrade head
 ```
 
 This starts:
@@ -116,24 +119,34 @@ uvicorn app.main:app --reload
 
 ### Upload PVs from CSV
 
-Load your PV definitions from the consolidated CSV file:
-
-```bash
-# Dry run (see what would be uploaded)
-python -m scripts.upload_csv /path/to/consolidated.csv --dry-run
-
-# Full upload (~36K PVs)
-python -m scripts.upload_csv /path/to/consolidated.csv
-
-# With custom batch size
-python -m scripts.upload_csv /path/to/consolidated.csv --batch-size 1000
-```
-
-The CSV format expected:
+The expected format:
 ```csv
 Setpoint,Readback,Region,Area,Subsystem
 FBCK:LNG6:1:BC2ELTOL,,"Feedback-All","LIMITS","FBCK"
 QUAD:LI21:201:BDES,QUAD:LI21:201:BACT,"Cu Linac","LI21","Magnet"
+...
+```
+
+#### Using the UI
+* navigate to the "Browser PVs" page
+* click the "Import PVs" button
+* select the consolidated CSV
+
+#### Using a bash script
+In addition to importing PVs, upload_csv.py also creates tag groups for the tags found in the CSV.  However, it must be run from within the docker service.
+
+```bash
+# Copying script and data into docker service
+docker cp /path/to/local/upload_csv.py /path/to/local/consolidated.py squirrel-api:/tmp/
+
+# Dry run (see what would be uploaded)
+docker exec squirrel-api python /tmp/upload_csv.py /tmp/consolidated.csv --dry-run
+
+# Full upload (~36K PVs)
+docker exec squirrel-api python /tmp/upload_csv.py /tmp/consolidated.csv
+
+# With custom batch size
+docker exec squirrel-api python /tmp/upload_csv.py /tmp/consolidated.csv --batch-size 1000
 ```
 
 ### Seed Test Data
