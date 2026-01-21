@@ -16,10 +16,11 @@ Benefits over asyncio.create_task():
 - Dead letter queue for failed jobs
 """
 import logging
+
 from arq.connections import RedisSettings
 
-from app.config import get_settings
 from app.tasks import create_snapshot_task, restore_snapshot_task
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -35,11 +36,13 @@ async def startup(ctx: dict) -> None:
 
     # Initialize EPICS service
     from app.services.epics_service import get_epics_service
+
     ctx["epics"] = get_epics_service()
     logger.info("EPICS service initialized")
 
     # Initialize Redis service
     from app.services.redis_service import get_redis_service
+
     ctx["redis"] = get_redis_service()
     await ctx["redis"].connect()
     logger.info("Redis service connected")
@@ -86,6 +89,7 @@ class WorkerSettings:
 
     Configuration for the background task worker.
     """
+
     # Task functions to register
     functions = [
         create_snapshot_task,
@@ -102,10 +106,10 @@ class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
 
     # Worker configuration
-    max_jobs = 10           # Max concurrent jobs per worker
-    job_timeout = 600       # 10 minutes max per job
-    retry_jobs = True       # Enable automatic retries
-    max_tries = 3           # Max retry attempts
+    max_jobs = 10  # Max concurrent jobs per worker
+    job_timeout = 600  # 10 minutes max per job
+    retry_jobs = True  # Enable automatic retries
+    max_tries = 3  # Max retry attempts
 
     # Queue settings
     queue_name = "arq:queue"  # Default queue name

@@ -1,14 +1,12 @@
-import asyncio
-import json
 import uuid
-from datetime import datetime
-from typing import Callable, Optional, Sequence
-from sqlalchemy import select, func, delete
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+import asyncio
+from collections.abc import Callable
 
-from app.models.snapshot import Snapshot, SnapshotValue
+from sqlalchemy import func, delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.pv import pv_tag
+from app.models.snapshot import Snapshot, SnapshotValue
 from app.repositories.base import BaseRepository
 
 # Chunk size for bulk inserts to prevent blocking event loop
@@ -21,12 +19,7 @@ class SnapshotRepository(BaseRepository[Snapshot]):
     def __init__(self, session: AsyncSession):
         super().__init__(Snapshot, session)
 
-    async def get_with_values(
-        self,
-        snapshot_id: str,
-        limit: int | None = None,
-        offset: int = 0
-    ) -> Snapshot | None:
+    async def get_with_values(self, snapshot_id: str, limit: int | None = None, offset: int = 0) -> Snapshot | None:
         """
         Get snapshot with values loaded.
 
@@ -36,9 +29,7 @@ class SnapshotRepository(BaseRepository[Snapshot]):
             offset: Number of values to skip
         """
         # First get the snapshot
-        result = await self.session.execute(
-            select(Snapshot).where(Snapshot.id == snapshot_id)
-        )
+        result = await self.session.execute(select(Snapshot).where(Snapshot.id == snapshot_id))
         snapshot = result.scalar_one_or_none()
         if not snapshot:
             return None
@@ -59,10 +50,7 @@ class SnapshotRepository(BaseRepository[Snapshot]):
         return snapshot
 
     async def search(
-        self,
-        title: str | None = None,
-        tag_ids: list[str] | None = None,
-        limit: int = 100
+        self, title: str | None = None, tag_ids: list[str] | None = None, limit: int = 100
     ) -> list[Snapshot]:
         """Search snapshots by title and/or tags.
 
@@ -95,9 +83,7 @@ class SnapshotRepository(BaseRepository[Snapshot]):
     async def get_value_count(self, snapshot_id: str) -> int:
         """Get count of values in a snapshot."""
         result = await self.session.execute(
-            select(func.count())
-            .select_from(SnapshotValue)
-            .where(SnapshotValue.snapshot_id == snapshot_id)
+            select(func.count()).select_from(SnapshotValue).where(SnapshotValue.snapshot_id == snapshot_id)
         )
         return result.scalar() or 0
 
@@ -115,16 +101,12 @@ class SnapshotRepository(BaseRepository[Snapshot]):
     async def delete_with_values(self, snapshot_id: str) -> bool:
         """Delete snapshot and all its values using direct SQL for performance."""
         # Check if snapshot exists first
-        result = await self.session.execute(
-            select(Snapshot.id).where(Snapshot.id == snapshot_id)
-        )
+        result = await self.session.execute(select(Snapshot.id).where(Snapshot.id == snapshot_id))
         if not result.scalar_one_or_none():
             return False
 
         # Delete snapshot directly - ON DELETE CASCADE handles values at DB level
-        await self.session.execute(
-            delete(Snapshot).where(Snapshot.id == snapshot_id)
-        )
+        await self.session.execute(delete(Snapshot).where(Snapshot.id == snapshot_id))
         await self.session.flush()
         return True
 
@@ -136,9 +118,7 @@ class SnapshotValueRepository(BaseRepository[SnapshotValue]):
         super().__init__(SnapshotValue, session)
 
     async def bulk_create(
-        self,
-        values: list[SnapshotValue],
-        progress_callback: Optional[Callable[[int, int, str], None]] = None
+        self, values: list[SnapshotValue], progress_callback: Callable[[int, int, str], None] | None = None
     ) -> None:
         """
         Bulk insert snapshot values in chunks to prevent blocking the event loop.
@@ -159,7 +139,7 @@ class SnapshotValueRepository(BaseRepository[SnapshotValue]):
 
         # Large dataset - chunked insert
         for i in range(0, total, BULK_INSERT_CHUNK_SIZE):
-            chunk = values[i:i + BULK_INSERT_CHUNK_SIZE]
+            chunk = values[i : i + BULK_INSERT_CHUNK_SIZE]
             self.session.add_all(chunk)
             await self.session.flush()
             await asyncio.sleep(0)  # Yield to event loop after each chunk
@@ -171,41 +151,24 @@ class SnapshotValueRepository(BaseRepository[SnapshotValue]):
 
     async def get_by_snapshot(self, snapshot_id: str) -> list[SnapshotValue]:
         """Get all values for a snapshot."""
-        result = await self.session.execute(
-            select(SnapshotValue)
-            .where(SnapshotValue.snapshot_id == snapshot_id)
-        )
+        result = await self.session.execute(select(SnapshotValue).where(SnapshotValue.snapshot_id == snapshot_id))
         return list(result.scalars().all())
 
     async def count_by_snapshot(self, snapshot_id: str) -> int:
         """Get count of values in a snapshot."""
         result = await self.session.execute(
-            select(func.count())
-            .select_from(SnapshotValue)
-            .where(SnapshotValue.snapshot_id == snapshot_id)
+            select(func.count()).select_from(SnapshotValue).where(SnapshotValue.snapshot_id == snapshot_id)
         )
         return result.scalar() or 0
 
-    async def get_by_snapshot_and_pvs(
-        self,
-        snapshot_id: str,
-        pv_ids: list[str]
-    ) -> list[SnapshotValue]:
+    async def get_by_snapshot_and_pvs(self, snapshot_id: str, pv_ids: list[str]) -> list[SnapshotValue]:
         """Get specific PV values from a snapshot."""
         result = await self.session.execute(
-            select(SnapshotValue)
-            .where(
-                SnapshotValue.snapshot_id == snapshot_id,
-                SnapshotValue.pv_id.in_(pv_ids)
-            )
+            select(SnapshotValue).where(SnapshotValue.snapshot_id == snapshot_id, SnapshotValue.pv_id.in_(pv_ids))
         )
         return list(result.scalars().all())
 
-    async def bulk_create_fast(
-        self,
-        snapshot_id: str,
-        values: list[dict]
-    ) -> int:
+    async def bulk_create_fast(self, snapshot_id: str, values: list[dict]) -> int:
         """
         Use PostgreSQL COPY for bulk insert (40k rows in ~2 seconds).
 
@@ -231,16 +194,18 @@ class SnapshotValueRepository(BaseRepository[SnapshotValue]):
         # Pass dicts for JSONB columns - bulk service handles JSON serialization
         records = []
         for v in values:
-            records.append((
-                str(uuid.uuid4()),
-                snapshot_id,
-                v["pv_id"],
-                v["pv_name"],
-                v.get("setpoint_value"),  # Dict - will be JSON serialized by bulk service
-                v.get("readback_value"),  # Dict - will be JSON serialized by bulk service
-                v.get("status"),
-                v.get("severity"),
-                v.get("timestamp"),
-            ))
+            records.append(
+                (
+                    str(uuid.uuid4()),
+                    snapshot_id,
+                    v["pv_id"],
+                    v["pv_name"],
+                    v.get("setpoint_value"),  # Dict - will be JSON serialized by bulk service
+                    v.get("readback_value"),  # Dict - will be JSON serialized by bulk service
+                    v.get("status"),
+                    v.get("severity"),
+                    v.get("timestamp"),
+                )
+            )
 
         return await bulk_service.bulk_insert_snapshot_values(records)

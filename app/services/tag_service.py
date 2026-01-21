@@ -1,11 +1,16 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.tag import TagGroup, Tag
-from app.repositories.tag_repository import TagGroupRepository, TagRepository
+from app.models.tag import Tag, TagGroup
 from app.schemas.tag import (
-    TagGroupCreate, TagGroupUpdate, TagGroupDTO, TagGroupSummaryDTO,
-    TagCreate, TagUpdate, TagDTO
+    TagDTO,
+    TagCreate,
+    TagUpdate,
+    TagGroupDTO,
+    TagGroupCreate,
+    TagGroupUpdate,
+    TagGroupSummaryDTO,
 )
+from app.repositories.tag_repository import TagRepository, TagGroupRepository
 
 
 class TagService:
@@ -20,12 +25,7 @@ class TagService:
         """Get all tag groups with counts."""
         groups_with_counts = await self.group_repo.get_all_with_counts()
         return [
-            TagGroupSummaryDTO(
-                id=group.id,
-                name=group.name,
-                description=group.description,
-                tagCount=count
-            )
+            TagGroupSummaryDTO(id=group.id, name=group.name, description=group.description, tagCount=count)
             for group, count in groups_with_counts
         ]
 
@@ -40,7 +40,7 @@ class TagService:
             description=group.description,
             tags=[TagDTO(id=t.id, name=t.name, description=t.description) for t in group.tags],
             createdDate=group.created_at,
-            lastModifiedDate=group.updated_at
+            lastModifiedDate=group.updated_at,
         )
 
     async def create_group(self, data: TagGroupCreate) -> TagGroupDTO:
@@ -50,10 +50,7 @@ class TagService:
         if existing:
             raise ValueError(f"Tag group with name '{data.name}' already exists")
 
-        group = TagGroup(
-            name=data.name,
-            description=data.description
-        )
+        group = TagGroup(name=data.name, description=data.description)
         group = await self.group_repo.create(group)
 
         return TagGroupDTO(
@@ -62,7 +59,7 @@ class TagService:
             description=group.description,
             tags=[],
             createdDate=group.created_at,
-            lastModifiedDate=group.updated_at
+            lastModifiedDate=group.updated_at,
         )
 
     async def update_group(self, group_id: str, data: TagGroupUpdate) -> TagGroupDTO | None:
@@ -89,7 +86,7 @@ class TagService:
             description=group.description,
             tags=[TagDTO(id=t.id, name=t.name, description=t.description) for t in group.tags],
             createdDate=group.created_at,
-            lastModifiedDate=group.updated_at
+            lastModifiedDate=group.updated_at,
         )
 
     async def delete_group(self, group_id: str, force: bool = False) -> bool:
@@ -114,11 +111,7 @@ class TagService:
         if existing:
             raise ValueError(f"Tag '{data.name}' already exists in this group")
 
-        tag = Tag(
-            name=data.name,
-            description=data.description,
-            group_id=group_id
-        )
+        tag = Tag(name=data.name, description=data.description, group_id=group_id)
         await self.tag_repo.create(tag)
 
         # Expire cached group and refresh to get updated tags
@@ -131,15 +124,10 @@ class TagService:
             description=group.description,
             tags=[TagDTO(id=t.id, name=t.name, description=t.description) for t in group.tags],
             createdDate=group.created_at,
-            lastModifiedDate=group.updated_at
+            lastModifiedDate=group.updated_at,
         )
 
-    async def update_tag(
-        self,
-        group_id: str,
-        tag_id: str,
-        data: TagUpdate
-    ) -> TagGroupDTO | None:
+    async def update_tag(self, group_id: str, tag_id: str, data: TagUpdate) -> TagGroupDTO | None:
         """Update a tag in a group."""
         tag = await self.tag_repo.get_by_id(tag_id)
         if not tag or tag.group_id != group_id:

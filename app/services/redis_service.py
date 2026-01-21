@@ -1,8 +1,9 @@
 import json
-import logging
 import time
-from dataclasses import dataclass, asdict
-from typing import Any, Callable
+import logging
+from typing import Any
+from dataclasses import asdict, dataclass
+from collections.abc import Callable
 
 import redis.asyncio as redis
 
@@ -19,6 +20,7 @@ class PVCacheEntry:
 
     Includes connection tracking and timestamps for health monitoring.
     """
+
     value: Any
     connected: bool
     updated_at: float  # Unix timestamp when we last updated this entry
@@ -70,11 +72,7 @@ class RedisService:
 
     async def connect(self) -> None:
         """Establish Redis connection."""
-        self._redis = redis.from_url(
-            settings.redis_url,
-            encoding="utf-8",
-            decode_responses=True
-        )
+        self._redis = redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
         # Test connection
         await self._redis.ping()
         logger.info(f"Connected to Redis at {settings.redis_url}")
@@ -508,7 +506,7 @@ class RedisService:
             self.MONITOR_LOCK_KEY,
             instance_id,
             nx=True,  # Only set if not exists
-            ex=self.MONITOR_LOCK_TTL  # Expire after TTL
+            ex=self.MONITOR_LOCK_TTL,  # Expire after TTL
         )
         return result is True
 

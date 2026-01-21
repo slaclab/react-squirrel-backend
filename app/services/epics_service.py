@@ -1,12 +1,12 @@
 import os
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Any, Callable, Optional
-import logging
 import math
+import logging
+from typing import Any
+from datetime import datetime
+from dataclasses import dataclass
+from collections.abc import Callable
 
-from aioca import caget, caput, connect, FORMAT_TIME, purge_channel_caches
-from aiobreaker import CircuitBreakerError
+from aioca import FORMAT_TIME, caget, caput, connect, purge_channel_caches
 
 from app.config import get_settings
 
@@ -23,6 +23,7 @@ os.environ["EPICS_CA_AUTO_ADDR_LIST"] = settings.epics_ca_auto_addr_list
 @dataclass
 class EpicsValue:
     """Container for EPICS PV value with metadata."""
+
     value: Any
     status: int | None = None
     severity: int | None = None
@@ -58,6 +59,7 @@ class EpicsService:
         if self._enable_circuit_breaker:
             try:
                 from app.services.circuit_breaker import get_circuit_breaker_manager
+
                 self._circuit_manager = get_circuit_breaker_manager()
             except ImportError:
                 logger.warning("Circuit breaker not available")
@@ -88,7 +90,7 @@ class EpicsService:
                 return None
         if isinstance(value, list):
             return [self._sanitize_value(v) for v in value]
-        if hasattr(value, 'tolist'):
+        if hasattr(value, "tolist"):
             return self._sanitize_value(value.tolist())
         return value
 
@@ -98,30 +100,30 @@ class EpicsService:
             return EpicsValue(
                 value=None,
                 connected=False,
-                error=f"Failed to read {pv_name}: {getattr(result, 'errorcode', 'unknown')}"
+                error=f"Failed to read {pv_name}: {getattr(result, 'errorcode', 'unknown')}",
             )
 
         # Extract timestamp if available
         timestamp = None
-        if hasattr(result, 'timestamp') and result.timestamp:
+        if hasattr(result, "timestamp") and result.timestamp:
             timestamp = datetime.fromtimestamp(result.timestamp)
 
         # Extract value, handling arrays
         value = result
-        if hasattr(result, 'tolist'):
+        if hasattr(result, "tolist"):
             value = result.tolist()
 
         return EpicsValue(
             value=self._sanitize_value(value),
-            status=getattr(result, 'status', None),
-            severity=getattr(result, 'severity', None),
+            status=getattr(result, "status", None),
+            severity=getattr(result, "severity", None),
             timestamp=timestamp,
-            units=getattr(result, 'units', None),
-            precision=getattr(result, 'precision', None),
-            upper_ctrl_limit=getattr(result, 'upper_ctrl_limit', None),
-            lower_ctrl_limit=getattr(result, 'lower_ctrl_limit', None),
+            units=getattr(result, "units", None),
+            precision=getattr(result, "precision", None),
+            upper_ctrl_limit=getattr(result, "upper_ctrl_limit", None),
+            lower_ctrl_limit=getattr(result, "lower_ctrl_limit", None),
             connected=True,
-            error=None
+            error=None,
         )
 
     async def connect_pv(self, pv_name: str) -> bool:
@@ -141,19 +143,10 @@ class EpicsService:
         # Check circuit breaker first
         if self._circuit_manager and self._circuit_manager.is_open(ioc_name):
             logger.debug(f"Circuit open for {ioc_name}, skipping {pv_name}")
-            return EpicsValue(
-                value=None,
-                connected=False,
-                error=f"Circuit breaker open for {ioc_name}"
-            )
+            return EpicsValue(value=None, connected=False, error=f"Circuit breaker open for {ioc_name}")
 
         try:
-            result = await caget(
-                pv_name,
-                format=FORMAT_TIME,
-                timeout=self._timeout,
-                throw=False
-            )
+            result = await caget(pv_name, format=FORMAT_TIME, timeout=self._timeout, throw=False)
             epics_value = self._augmented_to_epics_value(pv_name, result)
 
             # Record success/failure with circuit breaker
@@ -161,10 +154,7 @@ class EpicsService:
                 if epics_value.connected:
                     self._circuit_manager._record_success(ioc_name)
                 else:
-                    self._circuit_manager._record_failure(
-                        ioc_name,
-                        Exception(epics_value.error or "Connection failed")
-                    )
+                    self._circuit_manager._record_failure(ioc_name, Exception(epics_value.error or "Connection failed"))
 
             return epics_value
         except Exception as e:
@@ -188,12 +178,7 @@ class EpicsService:
         try:
             # aioca caget with list returns list of AugmentedValues
             # throw=False returns values with .ok=False instead of raising
-            values = await caget(
-                pv_names,
-                format=FORMAT_TIME,
-                timeout=self._timeout,
-                throw=False
-            )
+            values = await caget(pv_names, format=FORMAT_TIME, timeout=self._timeout, throw=False)
 
             for pv_name, result in zip(pv_names, values):
                 results[pv_name] = self._augmented_to_epics_value(pv_name, result)
@@ -202,17 +187,13 @@ class EpicsService:
             logger.error(f"Batch read error: {e}")
             for pv_name in pv_names:
                 if pv_name not in results:
-                    results[pv_name] = EpicsValue(
-                        value=None, connected=False, error=str(e)
-                    )
+                    results[pv_name] = EpicsValue(value=None, connected=False, error=str(e))
 
         logger.info(f"Completed get_many: {len(results)}/{len(pv_names)} PVs")
         return results
 
     async def get_many_with_progress(
-        self,
-        pv_names: list[str],
-        progress_callback: Optional[Callable] = None
+        self, pv_names: list[str], progress_callback: Callable | None = None
     ) -> dict[str, EpicsValue]:
         """
         Get values for multiple PVs with progress tracking.
@@ -230,16 +211,11 @@ class EpicsService:
         batch_size = self._chunk_size
 
         for i in range(0, total_pvs, batch_size):
-            batch = pv_names[i:i + batch_size]
+            batch = pv_names[i : i + batch_size]
 
             try:
                 # aioca handles parallel connections internally
-                batch_values = await caget(
-                    batch,
-                    format=FORMAT_TIME,
-                    timeout=self._timeout,
-                    throw=False
-                )
+                batch_values = await caget(batch, format=FORMAT_TIME, timeout=self._timeout, throw=False)
 
                 for pv_name, result in zip(batch, batch_values):
                     results[pv_name] = self._augmented_to_epics_value(pv_name, result)
@@ -248,27 +224,21 @@ class EpicsService:
                 logger.error(f"Batch error: {e}")
                 for pv_name in batch:
                     if pv_name not in results:
-                        results[pv_name] = EpicsValue(
-                            value=None, connected=False, error=str(e)
-                        )
+                        results[pv_name] = EpicsValue(value=None, connected=False, error=str(e))
 
             # Report progress
             current = min(i + batch_size, total_pvs)
             connected_so_far = sum(1 for r in results.values() if r.connected)
             if progress_callback:
                 await progress_callback(
-                    current, total_pvs,
-                    f"Read {current:,}/{total_pvs:,} PVs ({connected_so_far:,} connected)"
+                    current, total_pvs, f"Read {current:,}/{total_pvs:,} PVs ({connected_so_far:,} connected)"
                 )
 
             logger.info(f"Read {current:,}/{total_pvs:,} PVs ({connected_so_far} connected)")
 
         if progress_callback:
             connected_count = sum(1 for r in results.values() if r.connected)
-            await progress_callback(
-                total_pvs, total_pvs,
-                f"Completed: {connected_count:,}/{total_pvs:,} PVs connected"
-            )
+            await progress_callback(total_pvs, total_pvs, f"Completed: {connected_count:,}/{total_pvs:,} PVs connected")
 
         connected_count = sum(1 for r in results.values() if r.connected)
         logger.info(f"Completed get_many_with_progress: {connected_count}/{total_pvs} PVs connected")
@@ -277,13 +247,7 @@ class EpicsService:
     async def put_single(self, pv_name: str, value: Any) -> tuple[bool, str | None]:
         """Write a value to a single PV."""
         try:
-            result = await caput(
-                pv_name,
-                value,
-                timeout=self._timeout,
-                wait=True,
-                throw=False
-            )
+            result = await caput(pv_name, value, timeout=self._timeout, wait=True, throw=False)
             if result.ok:
                 return True, None
             return False, f"Failed to write to {pv_name}: {getattr(result, 'errorcode', 'unknown')}"
@@ -306,22 +270,13 @@ class EpicsService:
             await connect(pv_names, timeout=self._conn_timeout, throw=False)
 
             # Write all values - aioca handles the list
-            put_results = await caput(
-                pv_names,
-                pv_values,
-                timeout=self._timeout,
-                wait=True,
-                throw=False
-            )
+            put_results = await caput(pv_names, pv_values, timeout=self._timeout, wait=True, throw=False)
 
             for pv_name, result in zip(pv_names, put_results):
                 if result.ok:
                     results[pv_name] = (True, None)
                 else:
-                    results[pv_name] = (
-                        False,
-                        f"Failed: {getattr(result, 'errorcode', 'unknown')}"
-                    )
+                    results[pv_name] = (False, f"Failed: {getattr(result, 'errorcode', 'unknown')}")
 
         except Exception as e:
             logger.error(f"Batch put error: {e}")

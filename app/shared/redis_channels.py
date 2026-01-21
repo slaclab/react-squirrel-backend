@@ -26,7 +26,7 @@ class RedisChannels:
     MONITOR_LOCK_TTL = 30  # seconds
 
     # WebSocket (for multi-instance support)
-    WS_CLIENTS_PREFIX = "squirrel:ws:clients:"          # {instance_id} -> Set of client_ids
+    WS_CLIENTS_PREFIX = "squirrel:ws:clients:"  # {instance_id} -> Set of client_ids
     WS_SUBSCRIPTIONS_PREFIX = "squirrel:ws:subscriptions:"  # {client_id} -> Set of PV names
     WS_PV_SUBSCRIBERS_PREFIX = "squirrel:ws:pv_subscribers:"  # {pv_name} -> Set of client_ids
     WS_INSTANCE_HEARTBEAT_PREFIX = "squirrel:ws:instance_heartbeat:"  # {instance_id} -> timestamp

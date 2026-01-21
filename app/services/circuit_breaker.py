@@ -11,11 +11,12 @@ Uses aiobreaker library for robust async circuit breaker implementation.
 """
 import asyncio
 import logging
-from dataclasses import dataclass
-from datetime import datetime
 from enum import Enum
+from typing import Any
+from datetime import datetime
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from dataclasses import dataclass
+from collections.abc import Callable
 
 from aiobreaker import CircuitBreaker, CircuitBreakerError, CircuitBreakerListener
 
@@ -27,14 +28,16 @@ settings = get_settings()
 
 class CircuitState(str, Enum):
     """Circuit breaker states."""
-    CLOSED = "closed"       # Normal operation
-    OPEN = "open"           # Failing, requests blocked
-    HALF_OPEN = "half_open" # Testing if service recovered
+
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Failing, requests blocked
+    HALF_OPEN = "half_open"  # Testing if service recovered
 
 
 @dataclass
 class CircuitStats:
     """Statistics for a circuit breaker."""
+
     name: str
     state: CircuitState
     failure_count: int
@@ -49,9 +52,7 @@ class CircuitBreakerLogger(CircuitBreakerListener):
 
     def state_change(self, cb: CircuitBreaker, old_state, new_state):
         """Called when circuit breaker state changes."""
-        logger.warning(
-            f"Circuit breaker '{cb.name}' state changed: {old_state} -> {new_state}"
-        )
+        logger.warning(f"Circuit breaker '{cb.name}' state changed: {old_state} -> {new_state}")
 
     def failure(self, cb: CircuitBreaker, exc: Exception):
         """Called when a failure is recorded."""
@@ -137,6 +138,7 @@ class EpicsCircuitBreakerManager:
             async def read_value(pv_name):
                 return await caget(pv_name)
         """
+
         def decorator(func: Callable):
             @wraps(func)
             async def wrapper(*args, **kwargs):
@@ -151,16 +153,12 @@ class EpicsCircuitBreakerManager:
                 except Exception as e:
                     self._record_failure(circuit_name, e)
                     raise
+
             return wrapper
+
         return decorator
 
-    async def call(
-        self,
-        circuit_name: str,
-        func: Callable,
-        *args,
-        **kwargs
-    ) -> Any:
+    async def call(self, circuit_name: str, func: Callable, *args, **kwargs) -> Any:
         """
         Call a function through a circuit breaker.
 
@@ -231,10 +229,7 @@ class EpicsCircuitBreakerManager:
 
     def get_open_circuits(self) -> list[str]:
         """Get names of all open circuits."""
-        return [
-            name for name, cb in self._circuits.items()
-            if cb.state.name == "open"
-        ]
+        return [name for name, cb in self._circuits.items() if cb.state.name == "open"]
 
     def _record_success(self, circuit_name: str) -> None:
         """Record a successful call."""
@@ -274,15 +269,9 @@ class EpicsCircuitBreakerManager:
 _manager: EpicsCircuitBreakerManager | None = None
 
 
-def get_circuit_breaker_manager(
-    fail_max: int = 5,
-    reset_timeout: float = 30.0
-) -> EpicsCircuitBreakerManager:
+def get_circuit_breaker_manager(fail_max: int = 5, reset_timeout: float = 30.0) -> EpicsCircuitBreakerManager:
     """Get or create the circuit breaker manager singleton."""
     global _manager
     if _manager is None:
-        _manager = EpicsCircuitBreakerManager(
-            fail_max=fail_max,
-            reset_timeout=reset_timeout
-        )
+        _manager = EpicsCircuitBreakerManager(fail_max=fail_max, reset_timeout=reset_timeout)
     return _manager

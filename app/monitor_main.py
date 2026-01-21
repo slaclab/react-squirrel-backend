@@ -9,24 +9,20 @@ This decouples the PV monitoring from the API process for better reliability:
 
 Run with: python -m app.monitor_main
 """
+import uuid
+import signal
 import asyncio
 import logging
-import os
-import signal
-import uuid
 
 from app.config import get_settings
+from app.db.session import async_session_maker
+from app.services.watchdog import get_watchdog
+from app.services.pv_monitor import get_pv_monitor
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
-from app.services.pv_monitor import get_pv_monitor
-from app.services.watchdog import get_watchdog
-from app.db.session import async_session_maker
 
 # Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
@@ -100,6 +96,7 @@ async def main():
     try:
         async with async_session_maker() as session:
             from app.repositories.pv_repository import PVRepository
+
             pv_repo = PVRepository(session)
             pv_addresses_data = await pv_repo.get_all_addresses()
 

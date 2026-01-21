@@ -1,10 +1,12 @@
-from datetime import datetime
 from typing import Any
-from pydantic import BaseModel, Field
+from datetime import datetime
+
+from pydantic import Field, BaseModel
 
 
 class EpicsValueDTO(BaseModel):
     """EPICS value with metadata."""
+
     model_config = {"extra": "ignore"}  # Ignore extra fields from JSONB
 
     value: Any
@@ -19,6 +21,7 @@ class EpicsValueDTO(BaseModel):
 
 class TagInfoDTO(BaseModel):
     """Lightweight tag info for PV values."""
+
     id: str
     name: str
     groupName: str
@@ -26,6 +29,7 @@ class TagInfoDTO(BaseModel):
 
 class PVValueDTO(BaseModel):
     """PV value in a snapshot."""
+
     pvId: str
     pvName: str  # Primary name (setpoint or readback)
     setpointName: str | None = None  # Actual setpoint PV address
@@ -45,11 +49,13 @@ class SnapshotBase(BaseModel):
 
 class NewSnapshotDTO(SnapshotBase):
     """DTO for creating a snapshot. PVs are automatically included."""
+
     pass
 
 
 class SnapshotSummaryDTO(SnapshotBase):
     """Summary DTO for listing snapshots."""
+
     id: str
     createdDate: datetime
     createdBy: str | None = None
@@ -61,16 +67,19 @@ class SnapshotSummaryDTO(SnapshotBase):
 
 class SnapshotDTO(SnapshotSummaryDTO):
     """Full snapshot with all values."""
+
     pvValues: list[PVValueDTO] = []
 
 
 class RestoreRequestDTO(BaseModel):
     """Request to restore PV values from a snapshot."""
+
     pvIds: list[str] | None = None  # If None, restore all
 
 
 class RestoreResultDTO(BaseModel):
     """Result of a restore operation."""
+
     totalPVs: int
     successCount: int
     failureCount: int
@@ -79,6 +88,7 @@ class RestoreResultDTO(BaseModel):
 
 class ComparisonResultDTO(BaseModel):
     """Comparison between two snapshots."""
+
     snapshot1Id: str
     snapshot2Id: str
     differences: list[dict] = []  # [{pvId, pvName, value1, value2, withinTolerance}]

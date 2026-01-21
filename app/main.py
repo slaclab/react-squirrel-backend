@@ -12,26 +12,23 @@ Benefits of decoupled architecture:
 - Independent scaling and deployment
 """
 
-import logging
 import os
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.api.v1.router import router as v1_router
 from app.api.responses import APIException
+from app.api.v1.router import router as v1_router
+from app.api.v1.websocket import get_diff_manager
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
-from app.api.v1.websocket import get_diff_manager
 
 # Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
@@ -139,9 +136,9 @@ async def _start_embedded_monitor(redis_service, epics):
 
     This is enabled by setting SQUIRREL_EMBEDDED_MONITOR=true.
     """
-    from app.services.pv_monitor import get_pv_monitor
-    from app.services.watchdog import get_watchdog
     from app.db.session import async_session_maker
+    from app.services.watchdog import get_watchdog
+    from app.services.pv_monitor import get_pv_monitor
     from app.repositories.pv_repository import PVRepository
 
     pv_monitor = get_pv_monitor(redis_service)
@@ -161,9 +158,7 @@ async def _start_embedded_monitor(redis_service, epics):
 
     # Start PV monitoring (with batched startup)
     if pv_addresses:
-        logger.info(
-            f"[EMBEDDED] Starting PV Monitor for {len(pv_addresses)} unique addresses"
-        )
+        logger.info(f"[EMBEDDED] Starting PV Monitor for {len(pv_addresses)} unique addresses")
         await pv_monitor.start(list(pv_addresses))
         logger.info(f"[EMBEDDED] PV Monitor started for {len(pv_addresses)} unique addresses")
     else:
@@ -178,8 +173,8 @@ async def _start_embedded_monitor(redis_service, epics):
 
 async def _stop_embedded_monitor():
     """Stop embedded PV Monitor and Watchdog."""
-    from app.services.pv_monitor import get_pv_monitor
     from app.services.watchdog import get_watchdog
+    from app.services.pv_monitor import get_pv_monitor
 
     # Stop Watchdog
     if settings.watchdog_enabled:
@@ -205,7 +200,7 @@ app = FastAPI(
     title="Squirrel Backend",
     description="High-performance EPICS snapshot/restore backend with 40k PV support",
     version="0.2.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # CORS middleware
@@ -223,11 +218,7 @@ app.add_middleware(
 async def api_exception_handler(request: Request, exc: APIException):
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "errorCode": exc.error_code,
-            "errorMessage": exc.error_message,
-            "payload": None
-        }
+        content={"errorCode": exc.error_code, "errorMessage": exc.error_message, "payload": None},
     )
 
 
@@ -240,8 +231,8 @@ async def generic_exception_handler(request: Request, exc: Exception):
         content={
             "errorCode": 500,
             "errorMessage": str(exc) if settings.debug else "Internal server error",
-            "payload": None
-        }
+            "payload": None,
+        },
     )
 
 
@@ -259,9 +250,4 @@ async def health_check():
 # Root redirect
 @app.get("/")
 async def root():
-    return {
-        "message": "Squirrel Backend API",
-        "docs": "/docs",
-        "health": "/v1/health/summary",
-        "version": "0.2.0"
-    }
+    return {"message": "Squirrel Backend API", "docs": "/docs", "health": "/v1/health/summary", "version": "0.2.0"}

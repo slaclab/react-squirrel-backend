@@ -1,11 +1,11 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pv import PV
+from app.schemas.pv import PVElementDTO, NewPVElementDTO, UpdatePVElementDTO
+from app.schemas.tag import TagDTO
+from app.schemas.common import PagedResult
 from app.repositories.pv_repository import PVRepository
 from app.repositories.tag_repository import TagRepository
-from app.schemas.pv import NewPVElementDTO, UpdatePVElementDTO, PVElementDTO
-from app.schemas.common import PagedResult
-from app.schemas.tag import TagDTO
 
 
 class PVService:
@@ -30,26 +30,19 @@ class PVService:
             readOnly=pv.read_only,
             tags=[TagDTO(id=t.id, name=t.name, description=t.description) for t in pv.tags],
             createdDate=pv.created_at,
-            lastModifiedDate=pv.updated_at
+            lastModifiedDate=pv.updated_at,
         )
 
     async def search_paged(
-        self,
-        search: str | None = None,
-        page_size: int = 100,
-        continuation_token: str | None = None
+        self, search: str | None = None, page_size: int = 100, continuation_token: str | None = None
     ) -> PagedResult[PVElementDTO]:
         """Search PVs with pagination."""
         pvs, next_token, total_count = await self.pv_repo.search_by_name(
-            search=search,
-            limit=page_size,
-            continuation_token=continuation_token
+            search=search, limit=page_size, continuation_token=continuation_token
         )
 
         return PagedResult(
-            results=[self._to_dto(pv) for pv in pvs],
-            continuationToken=next_token,
-            totalCount=total_count
+            results=[self._to_dto(pv) for pv in pvs], continuationToken=next_token, totalCount=total_count
         )
 
     async def get_by_id(self, pv_id: str) -> PVElementDTO | None:
@@ -84,7 +77,7 @@ class PVService:
             abs_tolerance=data.absTolerance,
             rel_tolerance=data.relTolerance,
             read_only=data.readOnly,
-            tags=tags
+            tags=tags,
         )
 
         pv = await self.pv_repo.create(pv)
@@ -116,7 +109,7 @@ class PVService:
                 abs_tolerance=data.absTolerance,
                 rel_tolerance=data.relTolerance,
                 read_only=data.readOnly,
-                tags=pv_tags
+                tags=pv_tags,
             )
             pvs.append(pv)
 
@@ -156,7 +149,4 @@ class PVService:
     async def get_all_for_snapshot(self) -> list[tuple[str, str | None, str | None]]:
         """Get all PV IDs and addresses for snapshot."""
         addresses = await self.pv_repo.get_all_addresses()
-        return [
-            (pv_id, setpoint, readback)
-            for pv_id, setpoint, readback, _ in addresses
-        ]
+        return [(pv_id, setpoint, readback) for pv_id, setpoint, readback, _ in addresses]

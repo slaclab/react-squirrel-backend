@@ -1,10 +1,12 @@
 """DTOs for Job-related API operations."""
 from datetime import datetime
+
 from pydantic import BaseModel
 
 
 class JobDTO(BaseModel):
     """Job status response."""
+
     id: str
     type: str
     status: str
@@ -22,5 +24,6 @@ class JobDTO(BaseModel):
 
 class JobCreatedDTO(BaseModel):
     """Response when a job is created."""
+
     jobId: str
     message: str = "Job started"

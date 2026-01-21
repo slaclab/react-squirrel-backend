@@ -1,5 +1,6 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
+
+from pydantic import Field, BaseModel
 
 
 class TagBase(BaseModel):
@@ -39,6 +40,7 @@ class TagGroupUpdate(BaseModel):
 
 class TagGroupSummaryDTO(BaseModel):
     """Summary DTO without full tag list."""
+
     id: str
     name: str
     description: str | None = None
@@ -50,6 +52,7 @@ class TagGroupSummaryDTO(BaseModel):
 
 class TagGroupDTO(TagGroupBase):
     """Full DTO with tags."""
+
     id: str
     tags: list[TagDTO] = []
     createdDate: datetime

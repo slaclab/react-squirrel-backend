@@ -11,13 +11,13 @@ This is the "Pull" check that complements the "Push" checks from connection call
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime
 from typing import TYPE_CHECKING
+from datetime import datetime
+from dataclasses import field, dataclass
 
 from app.config import get_settings
-from app.services.redis_service import RedisService
 from app.services.epics_service import EpicsService
+from app.services.redis_service import RedisService
 
 if TYPE_CHECKING:
     from app.services.pv_monitor import PVMonitor
@@ -29,6 +29,7 @@ settings = get_settings()
 @dataclass
 class WatchdogStats:
     """Statistics from the watchdog health checks."""
+
     last_check: datetime | None = None
     check_count: int = 0
     disconnected_count: int = 0
@@ -173,10 +174,7 @@ class PVWatchdog:
         for pv_name in disconnected:
             # Attempt to read the PV directly
             try:
-                value = await self._epics.get_single(
-                    pv_name,
-                    timeout=self._reconnect_timeout
-                )
+                value = await self._epics.get_single(pv_name, timeout=self._reconnect_timeout)
 
                 if value is not None and value.connected:
                     # PV is actually alive! Update Redis and restart monitor
@@ -242,10 +240,7 @@ class PVWatchdog:
         for pv_name in stale_pvs:
             # Issue a manual caget to verify and refresh the value
             try:
-                value = await self._epics.get_single(
-                    pv_name,
-                    timeout=self._reconnect_timeout
-                )
+                value = await self._epics.get_single(pv_name, timeout=self._reconnect_timeout)
 
                 if value is not None and value.connected:
                     # PV is alive, update the cache with fresh value
@@ -262,20 +257,12 @@ class PVWatchdog:
                     refreshed += 1
                 else:
                     # PV is not responding - mark as disconnected
-                    await self._redis.set_pv_connected(
-                        pv_name,
-                        connected=False,
-                        error="Failed watchdog verification"
-                    )
+                    await self._redis.set_pv_connected(pv_name, connected=False, error="Failed watchdog verification")
                     verified_stale += 1
 
             except Exception as e:
                 logger.warning(f"Watchdog: Stale PV {pv_name} failed verification: {e}")
-                await self._redis.set_pv_connected(
-                    pv_name,
-                    connected=False,
-                    error=f"Watchdog verification failed: {e}"
-                )
+                await self._redis.set_pv_connected(pv_name, connected=False, error=f"Watchdog verification failed: {e}")
                 verified_stale += 1
 
         return {
@@ -317,12 +304,15 @@ def get_watchdog(
     if _watchdog is None:
         if redis_service is None:
             from app.services.redis_service import get_redis_service
+
             redis_service = get_redis_service()
         if epics_service is None:
             from app.services.epics_service import get_epics_service
+
             epics_service = get_epics_service()
         if pv_monitor is None:
             from app.services.pv_monitor import get_pv_monitor
+
             pv_monitor = get_pv_monitor()
         _watchdog = PVWatchdog(redis_service, epics_service, pv_monitor)
     return _watchdog

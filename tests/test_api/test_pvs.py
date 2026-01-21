@@ -11,11 +11,9 @@ class TestPVCreate:
     @pytest.mark.asyncio
     async def test_create_pv_with_setpoint(self, client: AsyncClient):
         """Test creating a PV with setpoint address only."""
-        response = await client.post("/v1/pvs", json={
-            "setpointAddress": "CREATE:TEST:SP",
-            "device": "TEST-DEVICE",
-            "description": "Test PV"
-        })
+        response = await client.post(
+            "/v1/pvs", json={"setpointAddress": "CREATE:TEST:SP", "device": "TEST-DEVICE", "description": "Test PV"}
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -27,17 +25,20 @@ class TestPVCreate:
     @pytest.mark.asyncio
     async def test_create_pv_with_all_addresses(self, client: AsyncClient):
         """Test creating a PV with all address types."""
-        response = await client.post("/v1/pvs", json={
-            "setpointAddress": "FULL:TEST:SP",
-            "readbackAddress": "FULL:TEST:RB",
-            "configAddress": "FULL:TEST:CFG",
-            "device": "FULL-DEVICE",
-            "description": "Full test PV",
-            "absTolerance": 0.5,
-            "relTolerance": 0.05,
-            "readOnly": False,
-            "tags": []
-        })
+        response = await client.post(
+            "/v1/pvs",
+            json={
+                "setpointAddress": "FULL:TEST:SP",
+                "readbackAddress": "FULL:TEST:RB",
+                "configAddress": "FULL:TEST:CFG",
+                "device": "FULL-DEVICE",
+                "description": "Full test PV",
+                "absTolerance": 0.5,
+                "relTolerance": 0.05,
+                "readOnly": False,
+                "tags": [],
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -52,20 +53,18 @@ class TestPVCreate:
     @pytest.mark.asyncio
     async def test_create_pv_requires_at_least_one_address(self, client: AsyncClient):
         """Test that at least one address is required."""
-        response = await client.post("/v1/pvs", json={
-            "device": "NO-ADDRESS-DEVICE",
-            "description": "PV without any address"
-        })
+        response = await client.post(
+            "/v1/pvs", json={"device": "NO-ADDRESS-DEVICE", "description": "PV without any address"}
+        )
 
         assert response.status_code == 422  # Validation error
 
     @pytest.mark.asyncio
     async def test_create_pv_duplicate_address_fails(self, client: AsyncClient, sample_pv: dict):
         """Test that duplicate addresses are rejected."""
-        response = await client.post("/v1/pvs", json={
-            "setpointAddress": sample_pv["setpointAddress"],  # Duplicate
-            "device": "DUPLICATE-DEVICE"
-        })
+        response = await client.post(
+            "/v1/pvs", json={"setpointAddress": sample_pv["setpointAddress"], "device": "DUPLICATE-DEVICE"}  # Duplicate
+        )
 
         assert response.status_code == 409
         data = response.json()
@@ -76,11 +75,9 @@ class TestPVCreate:
     async def test_create_pv_with_tags(self, client: AsyncClient, sample_tag: tuple):
         """Test creating a PV with tags."""
         group, tag = sample_tag
-        response = await client.post("/v1/pvs", json={
-            "setpointAddress": "TAGGED:PV:SP",
-            "device": "TAGGED-DEVICE",
-            "tags": [tag["id"]]
-        })
+        response = await client.post(
+            "/v1/pvs", json={"setpointAddress": "TAGGED:PV:SP", "device": "TAGGED-DEVICE", "tags": [tag["id"]]}
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -95,10 +92,7 @@ class TestPVBulkCreate:
     @pytest.mark.asyncio
     async def test_bulk_create_pvs(self, client: AsyncClient):
         """Test bulk creation of multiple PVs."""
-        pvs_data = [
-            {"setpointAddress": f"BULK:PV:{i}:SP", "device": f"BULK-{i}"}
-            for i in range(10)
-        ]
+        pvs_data = [{"setpointAddress": f"BULK:PV:{i}:SP", "device": f"BULK-{i}"} for i in range(10)]
 
         response = await client.post("/v1/pvs/multi", json=pvs_data)
 
@@ -133,10 +127,7 @@ class TestPVSearch:
     @pytest.mark.asyncio
     async def test_search_pvs_paged(self, client: AsyncClient, sample_pvs: list):
         """Test paginated PV search."""
-        response = await client.get("/v1/pvs/paged", params={
-            "pvName": "TEST",
-            "pageSize": 2
-        })
+        response = await client.get("/v1/pvs/paged", params={"pvName": "TEST", "pageSize": 2})
 
         assert response.status_code == 200
         data = response.json()
@@ -149,19 +140,14 @@ class TestPVSearch:
     async def test_search_pvs_pagination_continuation(self, client: AsyncClient, sample_pvs: list):
         """Test pagination with continuation token."""
         # First page
-        response1 = await client.get("/v1/pvs/paged", params={
-            "pvName": "TEST",
-            "pageSize": 2
-        })
+        response1 = await client.get("/v1/pvs/paged", params={"pvName": "TEST", "pageSize": 2})
         data1 = response1.json()
         token = data1["payload"]["continuationToken"]
 
         # Second page
-        response2 = await client.get("/v1/pvs/paged", params={
-            "pvName": "TEST",
-            "pageSize": 2,
-            "continuationToken": token
-        })
+        response2 = await client.get(
+            "/v1/pvs/paged", params={"pvName": "TEST", "pageSize": 2, "continuationToken": token}
+        )
         data2 = response2.json()
 
         # Ensure different results
@@ -172,9 +158,7 @@ class TestPVSearch:
     @pytest.mark.asyncio
     async def test_search_pvs_no_results(self, client: AsyncClient):
         """Test search with no matching results."""
-        response = await client.get("/v1/pvs/paged", params={
-            "pvName": "NONEXISTENT:PV:ADDRESS"
-        })
+        response = await client.get("/v1/pvs/paged", params={"pvName": "NONEXISTENT:PV:ADDRESS"})
 
         assert response.status_code == 200
         data = response.json()
@@ -190,9 +174,7 @@ class TestPVUpdate:
     async def test_update_pv_description(self, client: AsyncClient, sample_pv: dict):
         """Test updating PV description."""
         pv_id = sample_pv["id"]
-        response = await client.put(f"/v1/pvs/{pv_id}", json={
-            "description": "Updated description"
-        })
+        response = await client.put(f"/v1/pvs/{pv_id}", json={"description": "Updated description"})
 
         assert response.status_code == 200
         data = response.json()
@@ -203,10 +185,7 @@ class TestPVUpdate:
     async def test_update_pv_tolerances(self, client: AsyncClient, sample_pv: dict):
         """Test updating PV tolerances."""
         pv_id = sample_pv["id"]
-        response = await client.put(f"/v1/pvs/{pv_id}", json={
-            "absTolerance": 1.0,
-            "relTolerance": 0.1
-        })
+        response = await client.put(f"/v1/pvs/{pv_id}", json={"absTolerance": 1.0, "relTolerance": 0.1})
 
         assert response.status_code == 200
         data = response.json()
@@ -216,9 +195,7 @@ class TestPVUpdate:
     @pytest.mark.asyncio
     async def test_update_pv_not_found(self, client: AsyncClient):
         """Test updating non-existent PV."""
-        response = await client.put("/v1/pvs/nonexistent-id", json={
-            "description": "Should fail"
-        })
+        response = await client.put("/v1/pvs/nonexistent-id", json={"description": "Should fail"})
 
         assert response.status_code == 404
         data = response.json()
@@ -240,9 +217,7 @@ class TestPVDelete:
         assert data["payload"] is True
 
         # Verify deletion
-        search_response = await client.get("/v1/pvs/paged", params={
-            "pvName": sample_pv["setpointAddress"]
-        })
+        search_response = await client.get("/v1/pvs/paged", params={"pvName": sample_pv["setpointAddress"]})
         assert len(search_response.json()["payload"]["results"]) == 0
 
     @pytest.mark.asyncio

@@ -1,7 +1,6 @@
-import io
 import json
 import logging
-from typing import Any
+
 import asyncpg
 
 from app.config import get_settings
@@ -29,19 +28,9 @@ class BulkInsertService:
 
         async def init_connection(conn):
             """Initialize connection with JSON codec for JSONB columns."""
-            await conn.set_type_codec(
-                'jsonb',
-                encoder=json.dumps,
-                decoder=json.loads,
-                schema='pg_catalog'
-            )
+            await conn.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
 
-        self._pool = await asyncpg.create_pool(
-            self._get_asyncpg_url(),
-            min_size=2,
-            max_size=10,
-            init=init_connection
-        )
+        self._pool = await asyncpg.create_pool(self._get_asyncpg_url(), min_size=2, max_size=10, init=init_connection)
         logger.info("BulkInsertService connected to PostgreSQL")
 
     async def disconnect(self) -> None:
@@ -50,10 +39,7 @@ class BulkInsertService:
             await self._pool.close()
             logger.info("BulkInsertService disconnected from PostgreSQL")
 
-    async def bulk_insert_snapshot_values(
-        self,
-        values: list[tuple]
-    ) -> int:
+    async def bulk_insert_snapshot_values(self, values: list[tuple]) -> int:
         """
         Insert snapshot values using COPY - 10x faster than INSERT.
 
@@ -92,7 +78,7 @@ class BulkInsertService:
                 VALUES
                     ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9)
                 """,
-                processed_values
+                processed_values,
             )
 
             result = f"COPY {len(processed_values)}"
@@ -102,10 +88,7 @@ class BulkInsertService:
             logger.info(f"Bulk inserted {count} snapshot values using COPY")
             return count
 
-    async def bulk_insert_pvs(
-        self,
-        values: list[tuple]
-    ) -> int:
+    async def bulk_insert_pvs(self, values: list[tuple]) -> int:
         """
         Bulk insert PVs using COPY.
 
@@ -126,21 +109,21 @@ class BulkInsertService:
 
         async with self._pool.acquire() as conn:
             result = await conn.copy_records_to_table(
-                'pv',
+                "pv",
                 records=values,
                 columns=[
-                    'id',
-                    'setpoint_address',
-                    'readback_address',
-                    'config_address',
-                    'device',
-                    'description',
-                    'abs_tolerance',
-                    'rel_tolerance',
-                    'read_only',
-                    'created_at',
-                    'updated_at'
-                ]
+                    "id",
+                    "setpoint_address",
+                    "readback_address",
+                    "config_address",
+                    "device",
+                    "description",
+                    "abs_tolerance",
+                    "rel_tolerance",
+                    "read_only",
+                    "created_at",
+                    "updated_at",
+                ],
             )
 
             count = int(result.split()[1]) if result else len(values)

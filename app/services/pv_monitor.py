@@ -1,13 +1,12 @@
+import time
 import asyncio
 import logging
-import time
-from datetime import datetime
 from typing import Any
 
-from aioca import camonitor, CANothing
+from aioca import CANothing, camonitor
 
-from app.services.redis_service import RedisService, PVCacheEntry
 from app.config import get_settings
+from app.services.redis_service import PVCacheEntry, RedisService
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -72,7 +71,7 @@ class PVMonitor:
                 logger.warning("PV Monitor startup interrupted")
                 break
 
-            batch = pv_addresses[i:i + self._batch_size]
+            batch = pv_addresses[i : i + self._batch_size]
             batch_num = (i // self._batch_size) + 1
 
             logger.info(f"Starting monitors batch {batch_num}/{total_batches} ({len(batch)} PVs)")
@@ -114,7 +113,7 @@ class PVMonitor:
                 pv_name,
                 on_value_change,
                 notify_disconnect=True,  # Get notified on disconnect
-                format=2  # FORMAT_TIME for timestamp
+                format=2,  # FORMAT_TIME for timestamp
             )
             self._subscriptions[pv_name] = subscription
             return True
@@ -140,17 +139,12 @@ class PVMonitor:
             # Handle disconnection (aioca sends CANothing on disconnect)
             if isinstance(value, CANothing):
                 logger.warning(f"PV disconnected: {pv_name}")
-                entry = PVCacheEntry(
-                    value=None,
-                    connected=False,
-                    updated_at=now,
-                    error="Disconnected from IOC"
-                )
+                entry = PVCacheEntry(value=None, connected=False, updated_at=now, error="Disconnected from IOC")
             else:
                 # Extract value, handling numpy arrays
-                if hasattr(value, 'tolist'):
+                if hasattr(value, "tolist"):
                     raw_value = value.tolist()
-                elif hasattr(value, '__iter__') and not isinstance(value, (str, bytes)):
+                elif hasattr(value, "__iter__") and not isinstance(value, str | bytes):
                     # Handle other array-like objects
                     try:
                         raw_value = list(value)
@@ -160,18 +154,18 @@ class PVMonitor:
                     raw_value = value
 
                 # Extract EPICS metadata
-                status = metadata.get('status')
-                severity = metadata.get('severity')
+                status = metadata.get("status")
+                severity = metadata.get("severity")
 
                 # Convert status to string if it's an enum
-                if status is not None and hasattr(status, 'name'):
+                if status is not None and hasattr(status, "name"):
                     status = status.name
                 elif status is not None:
                     status = str(status)
 
                 # Convert severity to int
                 if severity is not None:
-                    if hasattr(severity, 'value'):
+                    if hasattr(severity, "value"):
                         severity = severity.value
                     else:
                         severity = int(severity)
@@ -182,8 +176,8 @@ class PVMonitor:
                     updated_at=now,
                     status=status,
                     severity=severity,
-                    timestamp=metadata.get('timestamp'),
-                    units=metadata.get('units'),
+                    timestamp=metadata.get("timestamp"),
+                    units=metadata.get("units"),
                 )
 
             await self._update_queue.put((pv_name, entry))
@@ -208,10 +202,7 @@ class PVMonitor:
                 # Collect updates for batch_interval or until batch_size reached
                 try:
                     # Wait for first update
-                    pv_name, entry = await asyncio.wait_for(
-                        self._update_queue.get(),
-                        timeout=batch_interval
-                    )
+                    pv_name, entry = await asyncio.wait_for(self._update_queue.get(), timeout=batch_interval)
                     updates[pv_name] = entry
                     pv_names_to_publish.append(pv_name)
 
@@ -224,7 +215,7 @@ class PVMonitor:
                         except asyncio.QueueEmpty:
                             break
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
                 if updates:
@@ -353,7 +344,7 @@ class PVMonitor:
             add_list = list(to_add)
 
             for i in range(0, len(add_list), self._batch_size):
-                batch = add_list[i:i + self._batch_size]
+                batch = add_list[i : i + self._batch_size]
                 for pv_name in batch:
                     await self._start_monitor(pv_name)
 
@@ -361,10 +352,7 @@ class PVMonitor:
                     await asyncio.sleep(self._batch_delay_ms / 1000.0)
 
         self._monitored_pvs = new_pvs
-        logger.info(
-            f"Refreshed PV list: added {len(to_add)}, removed {len(to_remove)}, "
-            f"total {len(new_pvs)}"
-        )
+        logger.info(f"Refreshed PV list: added {len(to_add)}, removed {len(to_remove)}, " f"total {len(new_pvs)}")
 
     def get_monitored_count(self) -> int:
         """Get the number of monitored PVs."""
@@ -400,6 +388,7 @@ def get_pv_monitor(redis_service: RedisService | None = None) -> PVMonitor:
     if _pv_monitor is None:
         if redis_service is None:
             from app.services.redis_service import get_redis_service
+
             redis_service = get_redis_service()
         _pv_monitor = PVMonitor(redis_service)
     return _pv_monitor
