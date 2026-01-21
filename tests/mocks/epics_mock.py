@@ -1,6 +1,7 @@
-from datetime import datetime
-from typing import Any, Callable, Optional
 import random
+from typing import Any
+from datetime import datetime
+from collections.abc import Callable
 
 from app.services.epics_service import EpicsValue
 
@@ -30,26 +31,16 @@ class MockEpicsService:
     async def get_single(self, pv_name: str) -> EpicsValue:
         """Read a single PV."""
         if pv_name in self._mock_data:
-            return EpicsValue(
-                value=self._mock_data[pv_name],
-                timestamp=datetime.now(),
-                connected=True
-            )
+            return EpicsValue(value=self._mock_data[pv_name], timestamp=datetime.now(), connected=True)
         # Generate random value if not mocked
-        return EpicsValue(
-            value=random.uniform(0, 100),
-            timestamp=datetime.now(),
-            connected=True
-        )
+        return EpicsValue(value=random.uniform(0, 100), timestamp=datetime.now(), connected=True)
 
     async def get_many(self, pv_names: list[str]) -> dict[str, EpicsValue]:
         """Read multiple PVs."""
         return {pv: await self.get_single(pv) for pv in pv_names}
 
     async def get_many_with_progress(
-        self,
-        pv_names: list[str],
-        progress_callback: Optional[Callable] = None
+        self, pv_names: list[str], progress_callback: Callable | None = None
     ) -> dict[str, EpicsValue]:
         """Read multiple PVs with progress callback."""
         total = len(pv_names)

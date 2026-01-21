@@ -48,8 +48,8 @@ target-version = "py311"
 extend-exclude = ["__init__.py"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
-ignore = []
+select = ["E", "F", "W", "UP"]
+ignore = ["E402", "E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -15,20 +15,22 @@ Architecture for multi-instance:
 - Only send to clients connected to THIS instance
 """
 
-import asyncio
-import json
-import logging
 import os
+import json
 import time
 import uuid
+import asyncio
+import logging
 from collections import defaultdict
-from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from app.services.redis_service import get_redis_service, PVCacheEntry
-from app.services.subscription_registry import get_subscription_registry, SubscriptionRegistry
 from app.config import get_settings
+from app.services.redis_service import get_redis_service
+from app.services.subscription_registry import (
+    SubscriptionRegistry,
+    get_subscription_registry,
+)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -109,7 +111,9 @@ class DiffStreamManager:
         # Start heartbeat task
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
-        logger.info(f"DiffStreamManager started (instance: {self._instance_id}, batch interval: {self._batch_interval_ms}ms)")
+        logger.info(
+            f"DiffStreamManager started (instance: {self._instance_id}, batch interval: {self._batch_interval_ms}ms)"
+        )
 
     async def stop(self) -> None:
         """Stop the manager and cleanup."""
@@ -156,7 +160,9 @@ class DiffStreamManager:
         if self._registry:
             await self._registry.register_client(client_id)
 
-        logger.info(f"WebSocket client {client_id} connected (instance: {self._instance_id}, total: {len(self._connections)})")
+        logger.info(
+            f"WebSocket client {client_id} connected (instance: {self._instance_id}, total: {len(self._connections)})"
+        )
 
     async def disconnect(self, client_id: str) -> None:
         """Remove a WebSocket connection and clean up subscriptions."""
@@ -213,11 +219,14 @@ class DiffStreamManager:
                     initial_data[pv_name] = cached.to_dict()
 
             if initial_data:
-                await self._send_to_client(client_id, {
-                    "type": "initial",
-                    "data": initial_data,
-                    "count": len(initial_data),
-                })
+                await self._send_to_client(
+                    client_id,
+                    {
+                        "type": "initial",
+                        "data": initial_data,
+                        "count": len(initial_data),
+                    },
+                )
 
         except Exception as e:
             logger.error(f"Error sending initial values to {client_id}: {e}")
@@ -312,12 +321,15 @@ class DiffStreamManager:
                 # Send to each client
                 for client_id, pv_updates in client_updates.items():
                     if client_id in self._connections:
-                        await self._send_to_client(client_id, {
-                            "type": "diff",
-                            "data": pv_updates,
-                            "count": len(pv_updates),
-                            "timestamp": time.time(),
-                        })
+                        await self._send_to_client(
+                            client_id,
+                            {
+                                "type": "diff",
+                                "data": pv_updates,
+                                "count": len(pv_updates),
+                                "timestamp": time.time(),
+                            },
+                        )
 
             except asyncio.CancelledError:
                 raise
@@ -413,6 +425,7 @@ def get_connection_manager() -> DiffStreamManager:
 # WebSocket Endpoints
 # ============================================================
 
+
 @router.websocket("/ws/pvs")
 async def websocket_pvs(websocket: WebSocket):
     """
@@ -455,17 +468,21 @@ async def websocket_pvs(websocket: WebSocket):
                 try:
                     redis = get_redis_service()
                     all_values = await redis.get_all_pv_values_as_dict()
-                    await websocket.send_json({
-                        "type": "all_values",
-                        "values": all_values,
-                        "count": len(all_values),
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "all_values",
+                            "values": all_values,
+                            "count": len(all_values),
+                        }
+                    )
                 except Exception as e:
                     logger.error(f"Error getting all values: {e}")
-                    await websocket.send_json({
-                        "type": "error",
-                        "message": str(e),
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": str(e),
+                        }
+                    )
 
             elif message_type == "ping":
                 await websocket.send_json({"type": "pong", "timestamp": time.time()})

@@ -4,22 +4,16 @@ import logging
 from datetime import datetime
 
 from app.db.session import async_session_maker
-from app.models.job import JobStatus, JobType
-from app.repositories.job_repository import JobRepository
-from app.services.snapshot_service import SnapshotService
+from app.schemas.snapshot import NewSnapshotDTO
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
-from app.schemas.snapshot import NewSnapshotDTO
+from app.services.snapshot_service import SnapshotService
+from app.repositories.job_repository import JobRepository
 
 logger = logging.getLogger(__name__)
 
 
-async def run_snapshot_creation(
-    job_id: str,
-    title: str,
-    comment: str | None = None,
-    use_cache: bool = True
-) -> None:
+async def run_snapshot_creation(job_id: str, title: str, comment: str | None = None, use_cache: bool = True) -> None:
     """
     Background task to create a snapshot.
 
@@ -49,16 +43,12 @@ async def run_snapshot_creation(
             # Get all PV addresses with timeout to prevent indefinite blocking
             try:
                 pv_addresses = await asyncio.wait_for(
-                    snapshot_service.pv_repo.get_all_addresses(),
-                    timeout=30.0  # 30 second timeout for DB query
+                    snapshot_service.pv_repo.get_all_addresses(), timeout=30.0  # 30 second timeout for DB query
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 raise Exception("Timeout reading PV addresses from database (30s)")
 
-            await job_repo.update_progress(
-                job_id, 15,
-                f"Found {len(pv_addresses)} PVs, reading from EPICS..."
-            )
+            await job_repo.update_progress(job_id, 15, f"Found {len(pv_addresses)} PVs, reading from EPICS...")
             await session.commit()
             await asyncio.sleep(0)  # Yield to event loop
 
@@ -102,9 +92,7 @@ async def run_snapshot_creation(
 
             # Mark as completed with the snapshot ID as result
             await job_repo.mark_completed(
-                job_id,
-                result_id=result.id,
-                message=f"Snapshot created with {result.pvCount} PV values"
+                job_id, result_id=result.id, message=f"Snapshot created with {result.pvCount} PV values"
             )
             await session.commit()
 
@@ -121,12 +109,7 @@ async def run_snapshot_creation(
                 logger.exception(f"Failed to update job status: {inner_e}")
 
 
-def schedule_snapshot_creation(
-    job_id: str,
-    title: str,
-    comment: str | None = None,
-    use_cache: bool = True
-) -> None:
+def schedule_snapshot_creation(job_id: str, title: str, comment: str | None = None, use_cache: bool = True) -> None:
     """
     Schedule a snapshot creation task to run in the background.
 

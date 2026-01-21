@@ -10,12 +10,10 @@ Architecture:
 - When a PV update comes in, any instance can look up which clients need it
 - Instance heartbeats track which instances are alive
 """
-import asyncio
-import json
-import logging
 import time
 import uuid
-from typing import Set
+import asyncio
+import logging
 
 import redis.asyncio as redis
 
@@ -175,7 +173,7 @@ class SubscriptionRegistry:
 
         logger.debug(f"Client {client_id} unsubscribed from {len(pv_names)} PVs")
 
-    async def get_subscribers(self, pv_name: str) -> Set[str]:
+    async def get_subscribers(self, pv_name: str) -> set[str]:
         """Get all client IDs subscribed to a PV (across all instances)."""
         if not self._redis:
             return set()
@@ -183,7 +181,7 @@ class SubscriptionRegistry:
         pv_subscribers_key = f"{RedisChannels.WS_PV_SUBSCRIBERS_PREFIX}{pv_name}"
         return await self._redis.smembers(pv_subscribers_key)
 
-    async def get_local_subscribers(self, pv_name: str) -> Set[str]:
+    async def get_local_subscribers(self, pv_name: str) -> set[str]:
         """Get client IDs subscribed to a PV on THIS instance only."""
         if not self._redis:
             return set()
@@ -197,7 +195,7 @@ class SubscriptionRegistry:
 
         return all_subscribers & local_clients
 
-    async def get_client_subscriptions(self, client_id: str) -> Set[str]:
+    async def get_client_subscriptions(self, client_id: str) -> set[str]:
         """Get all PVs a client is subscribed to."""
         if not self._redis:
             return set()

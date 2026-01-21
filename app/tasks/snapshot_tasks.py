@@ -7,24 +7,21 @@ These tasks run in the Arq worker process for:
 - Separate worker scaling
 """
 import logging
+
 from arq import Retry
 
 from app.db.session import async_session_maker
-from app.repositories.job_repository import JobRepository
-from app.services.snapshot_service import SnapshotService
+from app.schemas.snapshot import NewSnapshotDTO
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
-from app.schemas.snapshot import NewSnapshotDTO
+from app.services.snapshot_service import SnapshotService
+from app.repositories.job_repository import JobRepository
 
 logger = logging.getLogger(__name__)
 
 
 async def create_snapshot_task(
-    ctx: dict,
-    job_id: str,
-    title: str,
-    comment: str | None = None,
-    use_cache: bool = True
+    ctx: dict, job_id: str, title: str, comment: str | None = None, use_cache: bool = True
 ) -> str:
     """
     Create a snapshot - runs in Arq worker process.
@@ -73,15 +70,9 @@ async def create_snapshot_task(
             data = NewSnapshotDTO(title=title, comment=comment)
 
             if use_cache:
-                result = await snapshot_service.create_snapshot_from_cache(
-                    data,
-                    progress_callback=on_progress
-                )
+                result = await snapshot_service.create_snapshot_from_cache(data, progress_callback=on_progress)
             else:
-                result = await snapshot_service.create_snapshot(
-                    data,
-                    progress_callback=on_progress
-                )
+                result = await snapshot_service.create_snapshot(data, progress_callback=on_progress)
 
             # Mark job as completed
             await job_repo.mark_completed(job_id, result_id=result.id)
@@ -110,12 +101,7 @@ async def create_snapshot_task(
             raise
 
 
-async def restore_snapshot_task(
-    ctx: dict,
-    job_id: str,
-    snapshot_id: str,
-    pv_ids: list[str] | None = None
-) -> dict:
+async def restore_snapshot_task(ctx: dict, job_id: str, snapshot_id: str, pv_ids: list[str] | None = None) -> dict:
     """
     Restore a snapshot to EPICS - runs in Arq worker process.
 
@@ -150,6 +136,7 @@ async def restore_snapshot_task(
 
             # Build restore request
             from app.schemas.snapshot import RestoreRequestDTO
+
             request = RestoreRequestDTO(pvIds=pv_ids) if pv_ids else None
 
             # Restore the snapshot
@@ -162,9 +149,7 @@ async def restore_snapshot_task(
                 "failure_count": result.failureCount,
             }
             await job_repo.mark_completed(
-                job_id,
-                result_id=snapshot_id,
-                message=f"Restored {result.successCount}/{result.totalPVs} PVs"
+                job_id, result_id=snapshot_id, message=f"Restored {result.successCount}/{result.totalPVs} PVs"
             )
             await session.commit()
 

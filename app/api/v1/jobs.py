@@ -1,19 +1,16 @@
 """API endpoints for job status monitoring."""
-from fastapi import APIRouter, Depends
+from fastapi import Depends, APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.api.responses import APIException, success_response
 from app.services.job_service import JobService
-from app.api.responses import success_response, APIException
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
 
 @router.get("/{job_id}", response_model=dict)
-async def get_job_status(
-    job_id: str,
-    db: AsyncSession = Depends(get_db)
-):
+async def get_job_status(job_id: str, db: AsyncSession = Depends(get_db)):
     """
     Get the status of a background job.
 

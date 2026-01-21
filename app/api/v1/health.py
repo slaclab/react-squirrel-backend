@@ -7,17 +7,15 @@ Provides health monitoring endpoints for:
 3. Watchdog status - Health check results
 """
 
-import time
 from datetime import datetime
-from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.services.redis_service import get_redis_service, RedisService
-from app.services.pv_monitor import get_pv_monitor, PVMonitor
-from app.services.watchdog import get_watchdog, PVWatchdog
 from app.api.responses import success_response
+from app.services.watchdog import get_watchdog
+from app.services.pv_monitor import get_pv_monitor
+from app.services.redis_service import get_redis_service
 
 router = APIRouter(prefix="/health", tags=["Health"])
 
@@ -26,14 +24,17 @@ router = APIRouter(prefix="/health", tags=["Health"])
 # Response Models
 # ============================================================
 
+
 class HeartbeatResponse(BaseModel):
     """Simple heartbeat response for frontend polling."""
+
     timestamp: float | None
     alive: bool
 
 
 class MonitorHealthResponse(BaseModel):
     """Comprehensive monitor health response."""
+
     alive: bool
     last_heartbeat: datetime | None
     heartbeat_age_seconds: float | None
@@ -49,6 +50,7 @@ class MonitorHealthResponse(BaseModel):
 
 class WatchdogStatsResponse(BaseModel):
     """Watchdog statistics response."""
+
     last_check: datetime | None
     check_count: int
     disconnected_count: int
@@ -61,6 +63,7 @@ class WatchdogStatsResponse(BaseModel):
 
 class HealthSummaryResponse(BaseModel):
     """Complete health summary for dashboard."""
+
     status: str  # "healthy", "degraded", "unhealthy"
     monitor_alive: bool
     heartbeat_age_seconds: float | None
@@ -77,6 +80,7 @@ class HealthSummaryResponse(BaseModel):
 # Endpoints
 # ============================================================
 
+
 @router.get("/heartbeat", response_model=dict)
 async def get_heartbeat():
     """
@@ -91,30 +95,36 @@ async def get_heartbeat():
 
         # Check if Redis is connected
         if not redis.is_connected():
-            return success_response({
-                "timestamp": None,
-                "alive": False,
-                "age_seconds": None,
-                "error": "Redis not connected",
-            })
+            return success_response(
+                {
+                    "timestamp": None,
+                    "alive": False,
+                    "age_seconds": None,
+                    "error": "Redis not connected",
+                }
+            )
 
         heartbeat = await redis.get_heartbeat()
         alive = await redis.is_monitor_alive(max_age_seconds=5.0)
         age_seconds = await redis.get_heartbeat_age()
 
-        return success_response({
-            "timestamp": heartbeat,
-            "alive": alive,
-            "age_seconds": age_seconds,
-        })
+        return success_response(
+            {
+                "timestamp": heartbeat,
+                "alive": alive,
+                "age_seconds": age_seconds,
+            }
+        )
     except Exception as e:
         # Redis not available - monitor is definitely not healthy
-        return success_response({
-            "timestamp": None,
-            "alive": False,
-            "age_seconds": None,
-            "error": str(e),
-        })
+        return success_response(
+            {
+                "timestamp": None,
+                "alive": False,
+                "age_seconds": None,
+                "error": str(e),
+            }
+        )
 
 
 @router.get("/monitor", response_model=MonitorHealthResponse)
@@ -237,13 +247,13 @@ async def get_health_summary():
 
         # Check if monitor is actually running based on PV count in Redis
         # (In distributed setup, monitor runs in separate container)
-        pv_monitor_running = health_stats.get("total_cached_pvs", 0) > 0 or monitor_alive
+        health_stats.get("total_cached_pvs", 0) > 0 or monitor_alive
 
         # For backwards compatibility, check local instance too (embedded mode)
         pv_monitor = get_pv_monitor()
         watchdog = get_watchdog()
         if pv_monitor.is_running():
-            pv_monitor_running = True
+            pass
         watchdog_running = watchdog.is_running()
         total_pvs = health_stats["total_cached_pvs"]
         connected_pvs = health_stats["connected_pvs"]

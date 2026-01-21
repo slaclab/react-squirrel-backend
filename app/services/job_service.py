@@ -1,14 +1,11 @@
 """Service for managing background jobs."""
-import asyncio
 import logging
-from datetime import datetime
-from typing import Any, Callable, Coroutine
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.job import Job, JobStatus, JobType
+from app.models.job import Job, JobType, JobStatus
+from app.schemas.job import JobDTO
 from app.repositories.job_repository import JobRepository
-from app.schemas.job import JobDTO, JobCreatedDTO
 
 logger = logging.getLogger(__name__)
 
@@ -20,18 +17,9 @@ class JobService:
         self.session = session
         self.repo = JobRepository(session)
 
-    async def create_job(
-        self,
-        job_type: JobType,
-        job_data: dict | None = None
-    ) -> Job:
+    async def create_job(self, job_type: JobType, job_data: dict | None = None) -> Job:
         """Create a new job record."""
-        job = Job(
-            type=job_type.value,
-            status=JobStatus.PENDING.value,
-            progress=0,
-            job_data=job_data
-        )
+        job = Job(type=job_type.value, status=JobStatus.PENDING.value, progress=0, job_data=job_data)
         return await self.repo.create(job)
 
     async def get_job(self, job_id: str) -> JobDTO | None:
@@ -41,12 +29,7 @@ class JobService:
             return None
         return self._to_dto(job)
 
-    async def update_progress(
-        self,
-        job_id: str,
-        progress: int,
-        message: str | None = None
-    ) -> JobDTO | None:
+    async def update_progress(self, job_id: str, progress: int, message: str | None = None) -> JobDTO | None:
         """Update job progress."""
         job = await self.repo.update_progress(job_id, progress, message)
         return self._to_dto(job) if job else None
@@ -57,10 +40,7 @@ class JobService:
         return self._to_dto(job) if job else None
 
     async def mark_completed(
-        self,
-        job_id: str,
-        result_id: str | None = None,
-        message: str | None = None
+        self, job_id: str, result_id: str | None = None, message: str | None = None
     ) -> JobDTO | None:
         """Mark a job as completed."""
         job = await self.repo.mark_completed(job_id, result_id, message)
@@ -83,5 +63,5 @@ class JobService:
             error=job.error,
             createdAt=job.created_at,
             startedAt=job.started_at,
-            completedAt=job.completed_at
+            completedAt=job.completed_at,
         )

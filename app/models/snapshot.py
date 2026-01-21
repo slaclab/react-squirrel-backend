@@ -1,10 +1,11 @@
+from typing import TYPE_CHECKING
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Any
-from sqlalchemy import String, Text, ForeignKey, Integer, DateTime
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin, UUIDMixin
+from sqlalchemy import Text, String, Integer, DateTime, ForeignKey
+from sqlalchemy.orm import Mapped, relationship, mapped_column
+from sqlalchemy.dialects.postgresql import JSONB
+
+from app.models.base import Base, UUIDMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.pv import PV
@@ -12,6 +13,7 @@ if TYPE_CHECKING:
 
 class Snapshot(Base, UUIDMixin, TimestampMixin):
     """Snapshot of all PV values at a point in time."""
+
     __tablename__ = "snapshot"
 
     title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -19,28 +21,18 @@ class Snapshot(Base, UUIDMixin, TimestampMixin):
     created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Relationships
-    values: Mapped[List["SnapshotValue"]] = relationship(
-        "SnapshotValue",
-        back_populates="snapshot",
-        cascade="all, delete-orphan",
-        lazy="selectin"
+    values: Mapped[list["SnapshotValue"]] = relationship(
+        "SnapshotValue", back_populates="snapshot", cascade="all, delete-orphan", lazy="selectin"
     )
 
 
 class SnapshotValue(Base, UUIDMixin):
     """Captured value of a single PV in a snapshot."""
+
     __tablename__ = "snapshot_value"
 
-    snapshot_id: Mapped[str] = mapped_column(
-        ForeignKey("snapshot.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
-    )
-    pv_id: Mapped[str] = mapped_column(
-        ForeignKey("pv.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
-    )
+    snapshot_id: Mapped[str] = mapped_column(ForeignKey("snapshot.id", ondelete="CASCADE"), nullable=False, index=True)
+    pv_id: Mapped[str] = mapped_column(ForeignKey("pv.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # Captured PV name (denormalized for query performance)
     pv_name: Mapped[str] = mapped_column(String(255), nullable=False)

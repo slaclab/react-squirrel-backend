@@ -1,6 +1,6 @@
 from datetime import datetime
-from pydantic import BaseModel, Field, model_validator
-from typing import Any
+
+from pydantic import Field, BaseModel, model_validator
 
 from app.schemas.tag import TagDTO
 
@@ -18,6 +18,7 @@ class PVBase(BaseModel):
 
 class NewPVElementDTO(PVBase):
     """DTO for creating a new PV."""
+
     tags: list[str] = []  # Tag IDs
 
     @model_validator(mode="after")
@@ -29,6 +30,7 @@ class NewPVElementDTO(PVBase):
 
 class UpdatePVElementDTO(BaseModel):
     """DTO for updating a PV."""
+
     description: str | None = None
     absTolerance: float | None = None
     relTolerance: float | None = None
@@ -38,6 +40,7 @@ class UpdatePVElementDTO(BaseModel):
 
 class PVElementDTO(PVBase):
     """Full PV response DTO."""
+
     id: str
     tags: list[TagDTO] = []
     createdDate: datetime
@@ -51,4 +54,5 @@ class PVElementDTO(PVBase):
 
 class LivePVRequest(BaseModel):
     """DTO for requesting live PV values via POST."""
+
     pv_names: list[str] = Field(..., description="List of PV names to fetch")

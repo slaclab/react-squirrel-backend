@@ -11,12 +11,7 @@ class TestSnapshotCreate:
     """Tests for snapshot creation."""
 
     @pytest.mark.asyncio
-    async def test_create_snapshot(
-        self,
-        client: AsyncClient,
-        sample_pvs: list[dict],
-        mock_epics: MockEpicsService
-    ):
+    async def test_create_snapshot(self, client: AsyncClient, sample_pvs: list[dict], mock_epics: MockEpicsService):
         """Test creating a snapshot captures all PV values."""
         # Set mock values for all PVs
         for pv in sample_pvs:
@@ -25,10 +20,9 @@ class TestSnapshotCreate:
             if pv.get("readbackAddress"):
                 mock_epics.set_mock_value(pv["readbackAddress"], 99.5)
 
-        response = await client.post("/v1/snapshots", json={
-            "title": "Test Snapshot Creation",
-            "comment": "Testing snapshot functionality"
-        })
+        response = await client.post(
+            "/v1/snapshots", json={"title": "Test Snapshot Creation", "comment": "Testing snapshot functionality"}
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -39,18 +33,13 @@ class TestSnapshotCreate:
 
     @pytest.mark.asyncio
     async def test_create_snapshot_with_disconnected_pvs(
-        self,
-        client: AsyncClient,
-        sample_pvs: list[dict],
-        mock_epics: MockEpicsService
+        self, client: AsyncClient, sample_pvs: list[dict], mock_epics: MockEpicsService
     ):
         """Test snapshot handles disconnected PVs gracefully."""
         # Only set values for some PVs (others will return random/default)
         mock_epics.set_mock_value(sample_pvs[0]["setpointAddress"], 50.0)
 
-        response = await client.post("/v1/snapshots", json={
-            "title": "Partial Connection Snapshot"
-        })
+        response = await client.post("/v1/snapshots", json={"title": "Partial Connection Snapshot"})
 
         assert response.status_code == 200
         data = response.json()
@@ -60,9 +49,7 @@ class TestSnapshotCreate:
     @pytest.mark.asyncio
     async def test_create_snapshot_requires_title(self, client: AsyncClient):
         """Test that snapshot title is required."""
-        response = await client.post("/v1/snapshots", json={
-            "comment": "No title provided"
-        })
+        response = await client.post("/v1/snapshots", json={"comment": "No title provided"})
 
         assert response.status_code == 422  # Validation error
 
@@ -71,11 +58,7 @@ class TestSnapshotGet:
     """Tests for snapshot retrieval."""
 
     @pytest.mark.asyncio
-    async def test_get_snapshot_by_id(
-        self,
-        client: AsyncClient,
-        sample_snapshot: dict
-    ):
+    async def test_get_snapshot_by_id(self, client: AsyncClient, sample_snapshot: dict):
         """Test getting a snapshot by ID includes all values."""
         snapshot_id = sample_snapshot["id"]
         response = await client.get(f"/v1/snapshots/{snapshot_id}")
@@ -98,11 +81,7 @@ class TestSnapshotGet:
         assert data["errorCode"] == 404
 
     @pytest.mark.asyncio
-    async def test_list_snapshots(
-        self,
-        client: AsyncClient,
-        sample_snapshot: dict
-    ):
+    async def test_list_snapshots(self, client: AsyncClient, sample_snapshot: dict):
         """Test listing all snapshots."""
         response = await client.get("/v1/snapshots")
 
@@ -112,15 +91,9 @@ class TestSnapshotGet:
         assert len(data["payload"]) >= 1
 
     @pytest.mark.asyncio
-    async def test_list_snapshots_with_filter(
-        self,
-        client: AsyncClient,
-        sample_snapshot: dict
-    ):
+    async def test_list_snapshots_with_filter(self, client: AsyncClient, sample_snapshot: dict):
         """Test listing snapshots with title filter."""
-        response = await client.get("/v1/snapshots", params={
-            "title": "Test"
-        })
+        response = await client.get("/v1/snapshots", params={"title": "Test"})
 
         assert response.status_code == 200
         data = response.json()
@@ -132,12 +105,7 @@ class TestSnapshotRestore:
     """Tests for snapshot restore functionality."""
 
     @pytest.mark.asyncio
-    async def test_restore_snapshot(
-        self,
-        client: AsyncClient,
-        sample_snapshot: dict,
-        mock_epics: MockEpicsService
-    ):
+    async def test_restore_snapshot(self, client: AsyncClient, sample_snapshot: dict, mock_epics: MockEpicsService):
         """Test restoring a snapshot writes values to EPICS."""
         snapshot_id = sample_snapshot["id"]
         response = await client.post(f"/v1/snapshots/{snapshot_id}/restore")
@@ -151,20 +119,13 @@ class TestSnapshotRestore:
 
     @pytest.mark.asyncio
     async def test_restore_snapshot_partial(
-        self,
-        client: AsyncClient,
-        sample_snapshot: dict,
-        sample_pvs: list[dict],
-        mock_epics: MockEpicsService
+        self, client: AsyncClient, sample_snapshot: dict, sample_pvs: list[dict], mock_epics: MockEpicsService
     ):
         """Test restoring only specific PVs."""
         snapshot_id = sample_snapshot["id"]
         pv_ids = [sample_pvs[0]["id"], sample_pvs[1]["id"]]
 
-        response = await client.post(
-            f"/v1/snapshots/{snapshot_id}/restore",
-            json={"pvIds": pv_ids}
-        )
+        response = await client.post(f"/v1/snapshots/{snapshot_id}/restore", json={"pvIds": pv_ids})
 
         assert response.status_code == 200
         data = response.json()
@@ -185,10 +146,7 @@ class TestSnapshotCompare:
 
     @pytest.mark.asyncio
     async def test_compare_snapshots_identical(
-        self,
-        client: AsyncClient,
-        sample_pvs: list[dict],
-        mock_epics: MockEpicsService
+        self, client: AsyncClient, sample_pvs: list[dict], mock_epics: MockEpicsService
     ):
         """Test comparing two identical snapshots."""
         # Set consistent values
@@ -215,10 +173,7 @@ class TestSnapshotCompare:
 
     @pytest.mark.asyncio
     async def test_compare_snapshots_different(
-        self,
-        client: AsyncClient,
-        sample_pvs: list[dict],
-        mock_epics: MockEpicsService
+        self, client: AsyncClient, sample_pvs: list[dict], mock_epics: MockEpicsService
     ):
         """Test comparing two different snapshots."""
         # Set initial values
@@ -260,11 +215,7 @@ class TestSnapshotDelete:
     """Tests for snapshot deletion."""
 
     @pytest.mark.asyncio
-    async def test_delete_snapshot(
-        self,
-        client: AsyncClient,
-        sample_snapshot: dict
-    ):
+    async def test_delete_snapshot(self, client: AsyncClient, sample_snapshot: dict):
         """Test deleting a snapshot."""
         snapshot_id = sample_snapshot["id"]
         response = await client.delete(f"/v1/snapshots/{snapshot_id}")

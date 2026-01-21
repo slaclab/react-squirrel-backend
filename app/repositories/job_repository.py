@@ -1,7 +1,7 @@
 """Repository for Job model operations."""
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.job import Job, JobStatus
@@ -38,7 +38,7 @@ class JobRepository(BaseRepository[Job]):
         progress: int | None = None,
         message: str | None = None,
         result_id: str | None = None,
-        error: str | None = None
+        error: str | None = None,
     ) -> Job | None:
         """Update job status and related fields."""
         job = await self.get_by_id(job_id)
@@ -67,43 +67,23 @@ class JobRepository(BaseRepository[Job]):
 
     async def mark_running(self, job_id: str) -> Job | None:
         """Mark a job as running."""
-        return await self.update_status(
-            job_id,
-            JobStatus.RUNNING,
-            progress=0,
-            message="Job started"
-        )
+        return await self.update_status(job_id, JobStatus.RUNNING, progress=0, message="Job started")
 
-    async def mark_completed(
-        self,
-        job_id: str,
-        result_id: str | None = None,
-        message: str | None = None
-    ) -> Job | None:
+    async def mark_completed(self, job_id: str, result_id: str | None = None, message: str | None = None) -> Job | None:
         """Mark a job as completed."""
         return await self.update_status(
             job_id,
             JobStatus.COMPLETED,
             progress=100,
             result_id=result_id,
-            message=message or "Job completed successfully"
+            message=message or "Job completed successfully",
         )
 
     async def mark_failed(self, job_id: str, error: str) -> Job | None:
         """Mark a job as failed."""
-        return await self.update_status(
-            job_id,
-            JobStatus.FAILED,
-            error=error,
-            message="Job failed"
-        )
+        return await self.update_status(job_id, JobStatus.FAILED, error=error, message="Job failed")
 
-    async def update_progress(
-        self,
-        job_id: str,
-        progress: int,
-        message: str | None = None
-    ) -> Job | None:
+    async def update_progress(self, job_id: str, progress: int, message: str | None = None) -> Job | None:
         """Update job progress."""
         job = await self.get_by_id(job_id)
         if not job:
