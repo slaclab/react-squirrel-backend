@@ -386,6 +386,11 @@ class SnapshotService:
             connected_setpoints = 0
             connected_readbacks = 0
 
+            def _format_ts(ts: float | None) -> str | None:
+                if ts is None:
+                    return None
+                return datetime.fromtimestamp(ts).isoformat()
+
             for pv_id, setpoint_addr, readback_addr, config_addr in pv_addresses:
                 setpoint_cached = cached_values.get(setpoint_addr) if setpoint_addr else None
                 readback_cached = cached_values.get(readback_addr) if readback_addr else None
@@ -408,7 +413,7 @@ class SnapshotService:
                         "value": _sanitize_for_json(setpoint_cached.get("value")),
                         "status": setpoint_cached.get("status"),
                         "severity": setpoint_cached.get("severity"),
-                        "timestamp": setpoint_cached.get("timestamp"),
+                        "timestamp": _format_ts(setpoint_cached.get("timestamp")),
                     }
 
                 # Build readback value dict
@@ -418,8 +423,16 @@ class SnapshotService:
                         "value": _sanitize_for_json(readback_cached.get("value")),
                         "status": readback_cached.get("status"),
                         "severity": readback_cached.get("severity"),
-                        "timestamp": readback_cached.get("timestamp"),
+                        "timestamp": _format_ts(readback_cached.get("timestamp")),
                     }
+
+                # Determine row timestamp from the actual data age
+                # Prefer readback time, then setpoint time, then Redis update time
+                row_ts = None
+                if readback_cached:
+                    row_ts = readback_cached.get("timestamp") or readback_cached.get("updated_at")
+                if row_ts is None and setpoint_cached:
+                    row_ts = setpoint_cached.get("timestamp") or setpoint_cached.get("updated_at")
 
                 snapshot_values_data.append({
                     "pv_id": pv_id,
@@ -428,7 +441,7 @@ class SnapshotService:
                     "readback_value": readback_value,
                     "status": setpoint_cached.get("status") if setpoint_cached else None,
                     "severity": setpoint_cached.get("severity") if setpoint_cached else None,
-                    "timestamp": datetime.now(),
+                    "timestamp": datetime.fromtimestamp(row_ts) if row_ts else datetime.now(),
                 })
 
             # Debug summary - note: we now save values even if disconnected

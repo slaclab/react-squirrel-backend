@@ -6,6 +6,8 @@ import logging
 import math
 
 from aioca import caget, caput, connect, FORMAT_TIME, purge_channel_caches
+from aiobreaker import CircuitBreakerError
+
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -38,12 +40,44 @@ class EpicsService:
     Native async EPICS service using aioca.
 
     No ThreadPool needed - aioca is natively async.
+
+    Features:
+    - Circuit breaker integration for failure isolation
+    - Per-IOC circuit breakers (extracted from PV name prefix)
+    - Automatic recovery when IOCs become healthy
     """
 
-    def __init__(self):
+    def __init__(self, enable_circuit_breaker: bool = True):
         self._timeout = settings.epics_ca_timeout
         self._conn_timeout = settings.epics_ca_conn_timeout
         self._chunk_size = settings.epics_chunk_size
+        self._enable_circuit_breaker = enable_circuit_breaker
+        self._circuit_manager = None
+
+        # Lazily initialize circuit breaker to avoid import issues
+        if self._enable_circuit_breaker:
+            try:
+                from app.services.circuit_breaker import get_circuit_breaker_manager
+                self._circuit_manager = get_circuit_breaker_manager()
+            except ImportError:
+                logger.warning("Circuit breaker not available")
+
+    def _extract_ioc_name(self, pv_name: str) -> str:
+        """
+        Extract IOC/subsystem name from PV name for circuit grouping.
+
+        Examples:
+            "LINAC:TEMP:1" -> "LINAC"
+            "BPM:X:1" -> "BPM"
+            "SYS:IOC:STATUS" -> "SYS:IOC"
+
+        For PVs without a clear prefix, use "default".
+        """
+        parts = pv_name.split(":")
+        if len(parts) >= 2:
+            # Use first two parts as IOC identifier
+            return f"{parts[0]}:{parts[1]}" if len(parts) > 2 else parts[0]
+        return "default"
 
     def _sanitize_value(self, value: Any) -> Any:
         """Sanitize value for JSON storage (handle NaN/Inf)."""
@@ -102,6 +136,17 @@ class EpicsService:
 
     async def get_single(self, pv_name: str) -> EpicsValue:
         """Read a single PV with metadata."""
+        ioc_name = self._extract_ioc_name(pv_name)
+
+        # Check circuit breaker first
+        if self._circuit_manager and self._circuit_manager.is_open(ioc_name):
+            logger.debug(f"Circuit open for {ioc_name}, skipping {pv_name}")
+            return EpicsValue(
+                value=None,
+                connected=False,
+                error=f"Circuit breaker open for {ioc_name}"
+            )
+
         try:
             result = await caget(
                 pv_name,
@@ -109,9 +154,26 @@ class EpicsService:
                 timeout=self._timeout,
                 throw=False
             )
-            return self._augmented_to_epics_value(pv_name, result)
+            epics_value = self._augmented_to_epics_value(pv_name, result)
+
+            # Record success/failure with circuit breaker
+            if self._circuit_manager:
+                if epics_value.connected:
+                    self._circuit_manager._record_success(ioc_name)
+                else:
+                    self._circuit_manager._record_failure(
+                        ioc_name,
+                        Exception(epics_value.error or "Connection failed")
+                    )
+
+            return epics_value
         except Exception as e:
             logger.error(f"Error getting {pv_name}: {e}")
+
+            # Record failure with circuit breaker
+            if self._circuit_manager:
+                self._circuit_manager._record_failure(ioc_name, e)
+
             return EpicsValue(value=None, connected=False, error=str(e))
 
     async def get_many(self, pv_names: list[str]) -> dict[str, EpicsValue]:

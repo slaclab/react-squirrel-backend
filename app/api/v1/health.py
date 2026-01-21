@@ -225,24 +225,26 @@ async def get_health_summary():
         pv_monitor = get_pv_monitor()
         watchdog = get_watchdog()
 
-        # Check heartbeat
+        # Check heartbeat (monitor process health)
         heartbeat_age = await redis.get_heartbeat_age()
         monitor_alive = heartbeat_age is not None and heartbeat_age < 5.0
 
         if not monitor_alive:
             issues.append("Monitor heartbeat is stale or missing")
 
-        # Check monitor running
-        if not pv_monitor.is_running():
-            issues.append("PV Monitor is not running")
-
-        # Check watchdog running
-        watchdog_running = watchdog.is_running()
-        if not watchdog_running:
-            issues.append("Watchdog is not running")
-
-        # Get connection stats
+        # Get connection stats from Redis
         health_stats = await redis.get_health_stats()
+
+        # Check if monitor is actually running based on PV count in Redis
+        # (In distributed setup, monitor runs in separate container)
+        pv_monitor_running = health_stats.get("total_cached_pvs", 0) > 0 or monitor_alive
+
+        # For backwards compatibility, check local instance too (embedded mode)
+        pv_monitor = get_pv_monitor()
+        watchdog = get_watchdog()
+        if pv_monitor.is_running():
+            pv_monitor_running = True
+        watchdog_running = watchdog.is_running()
         total_pvs = health_stats["total_cached_pvs"]
         connected_pvs = health_stats["connected_pvs"]
         disconnected_pvs = health_stats["disconnected_pvs"]
@@ -259,7 +261,7 @@ async def get_health_summary():
         watchdog_stats = watchdog.get_stats()
 
         # Determine overall status
-        if not monitor_alive or not pv_monitor.is_running():
+        if not monitor_alive:
             status = "unhealthy"
         elif disconnected_pct > 10 or len(issues) > 2:
             status = "degraded"
@@ -336,3 +338,154 @@ async def get_stale_pvs(max_age_seconds: float = 300):
 
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Failed to get stale PVs: {e}")
+
+
+@router.get("/circuits", response_model=dict)
+async def get_circuit_breaker_status():
+    """
+    Get circuit breaker status for all EPICS IOCs.
+
+    Circuit breakers prevent cascading failures by blocking requests
+    to failing IOCs until they recover.
+
+    States:
+    - closed: Normal operation, requests allowed
+    - open: IOC failing, requests blocked
+    - half_open: Testing if IOC recovered
+
+    Returns list of circuits with their current state and statistics.
+    """
+    try:
+        from app.services.circuit_breaker import get_circuit_breaker_manager
+
+        manager = get_circuit_breaker_manager()
+        stats = manager.get_all_stats()
+        open_circuits = manager.get_open_circuits()
+
+        return {
+            "open_circuit_count": len(open_circuits),
+            "total_circuits": len(stats),
+            "open_circuits": open_circuits,
+            "circuits": [
+                {
+                    "name": s.name,
+                    "state": s.state.value,
+                    "failure_count": s.failure_count,
+                    "success_count": s.success_count,
+                    "call_count": s.call_count,
+                    "last_failure": s.last_failure.isoformat() if s.last_failure else None,
+                    "opened_at": s.opened_at.isoformat() if s.opened_at else None,
+                }
+                for s in stats
+            ],
+        }
+    except ImportError:
+        return {
+            "error": "Circuit breaker not available",
+            "open_circuit_count": 0,
+            "total_circuits": 0,
+            "circuits": [],
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "open_circuit_count": 0,
+            "total_circuits": 0,
+            "circuits": [],
+        }
+
+
+@router.post("/circuits/{circuit_name}/close", response_model=dict)
+async def force_close_circuit(circuit_name: str):
+    """
+    Force close a circuit breaker (allow requests to IOC).
+
+    Use this to manually recover from a circuit breaker that opened
+    due to transient failures.
+    """
+    try:
+        from app.services.circuit_breaker import get_circuit_breaker_manager
+
+        manager = get_circuit_breaker_manager()
+        manager.force_close(circuit_name)
+        return {"success": True, "message": f"Circuit '{circuit_name}' forced closed"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/circuits/{circuit_name}/open", response_model=dict)
+async def force_open_circuit(circuit_name: str):
+    """
+    Force open a circuit breaker (block requests to IOC).
+
+    Use this for maintenance or to protect the system from
+    a known-failing IOC.
+    """
+    try:
+        from app.services.circuit_breaker import get_circuit_breaker_manager
+
+        manager = get_circuit_breaker_manager()
+        manager.force_open(circuit_name)
+        return {"success": True, "message": f"Circuit '{circuit_name}' forced open"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/monitor/status", response_model=dict)
+async def monitor_process_status():
+    """
+    Check if the separate PV Monitor process is alive via Redis heartbeat.
+
+    The PV Monitor runs as a separate process (squirrel-monitor) and updates
+    a heartbeat timestamp in Redis. This endpoint checks that heartbeat.
+
+    Returns:
+        status: "healthy", "stale", or "unknown"
+        age_seconds: Age of last heartbeat in seconds (if available)
+        leader: Instance ID of current monitor leader (if available)
+    """
+    try:
+        redis = get_redis_service()
+
+        if not redis.is_connected():
+            return {
+                "status": "unknown",
+                "message": "Redis not connected",
+                "age_seconds": None,
+                "leader": None,
+            }
+
+        heartbeat = await redis.get_monitor_heartbeat()
+        heartbeat_age = await redis.get_heartbeat_age()
+        leader = await redis.get_monitor_lock_holder()
+
+        if heartbeat is None:
+            return {
+                "status": "unknown",
+                "message": "No heartbeat found - monitor may not be running",
+                "age_seconds": None,
+                "leader": leader,
+            }
+
+        if heartbeat_age is not None and heartbeat_age > 30:
+            return {
+                "status": "stale",
+                "message": f"Heartbeat is {heartbeat_age:.1f}s old - monitor may be down",
+                "age_seconds": heartbeat_age,
+                "leader": leader,
+            }
+
+        return {
+            "status": "healthy",
+            "message": "Monitor process is alive",
+            "age_seconds": heartbeat_age,
+            "leader": leader,
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "age_seconds": None,
+            "leader": None,
+        }

@@ -1,6 +1,10 @@
+import logging
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
+from arq import create_pool
+from arq.connections import RedisSettings
 
+from app.config import get_settings
 from app.db.session import get_db
 from app.services.snapshot_service import SnapshotService
 from app.services.epics_service import get_epics_service
@@ -15,7 +19,28 @@ from app.schemas.snapshot import (
 from app.schemas.job import JobCreatedDTO
 from app.api.responses import success_response, APIException
 
+logger = logging.getLogger(__name__)
+settings = get_settings()
+
 router = APIRouter(prefix="/snapshots", tags=["Snapshots"])
+
+# Arq connection pool (reused across requests)
+_arq_pool = None
+
+
+async def get_arq_pool():
+    """Get or create the Arq connection pool."""
+    global _arq_pool
+    if _arq_pool is None:
+        try:
+            _arq_pool = await create_pool(
+                RedisSettings.from_dsn(settings.redis_url)
+            )
+            logger.info("Arq connection pool created")
+        except Exception as e:
+            logger.warning(f"Failed to create Arq pool: {e}")
+            return None
+    return _arq_pool
 
 
 @router.get("", response_model=dict)
@@ -58,7 +83,8 @@ async def create_snapshot(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     async_mode: bool = Query(True, alias="async", description="Run snapshot creation in background"),
-    use_cache: bool = Query(True, description="Read from Redis cache (instant) vs direct EPICS read")
+    use_cache: bool = Query(True, description="Read from Redis cache (instant) vs direct EPICS read"),
+    use_arq: bool = Query(True, description="Use Arq persistent queue (recommended) vs FastAPI BackgroundTasks")
 ):
     """
     Create a new snapshot by reading all PVs.
@@ -67,13 +93,15 @@ async def create_snapshot(
 
     - use_cache=true (default): Read from Redis cache (instant, <5s for 40k PVs)
     - use_cache=false: Read directly from EPICS (slower, 30-60s for 40k PVs)
+    - use_arq=true (default): Use Arq persistent queue (survives restarts)
+    - use_arq=false: Use FastAPI BackgroundTasks (lost on restart)
 
     By default (async=true), this returns immediately with a job ID that can be
     polled for status. Set async=false for synchronous operation (may timeout
     for large numbers of PVs).
     """
     if async_mode:
-        # Create a job and schedule background task
+        # Create a job record
         job_service = JobService(db)
         job = await job_service.create_job(
             JobType.SNAPSHOT_CREATE,
@@ -84,8 +112,29 @@ async def create_snapshot(
         # Otherwise the job won't be visible when frontend immediately polls for it
         await db.commit()
 
-        # Schedule the background task using FastAPI's BackgroundTasks
+        # Try to use Arq for persistent job queue
+        if use_arq:
+            pool = await get_arq_pool()
+            if pool:
+                try:
+                    await pool.enqueue_job(
+                        "create_snapshot_task",
+                        job_id=str(job.id),
+                        title=data.title,
+                        comment=data.comment,
+                        use_cache=use_cache,
+                    )
+                    logger.info(f"Enqueued snapshot job to Arq: {job.id}")
+                    return success_response(JobCreatedDTO(
+                        jobId=job.id,
+                        message=f"Snapshot creation queued for '{data.title}'" + (" (from cache)" if use_cache else " (direct EPICS)")
+                    ))
+                except Exception as e:
+                    logger.warning(f"Failed to enqueue to Arq, falling back to BackgroundTasks: {e}")
+
+        # Fallback to FastAPI BackgroundTasks
         background_tasks.add_task(run_snapshot_creation, job.id, data.title, data.comment, use_cache)
+        logger.info(f"Scheduled snapshot job via BackgroundTasks: {job.id}")
 
         return success_response(JobCreatedDTO(
             jobId=job.id,

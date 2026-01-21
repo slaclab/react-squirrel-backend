@@ -4,12 +4,15 @@ High-performance Python FastAPI backend for EPICS control system snapshot/restor
 
 ## Features
 
-- **Fast Snapshot Creation**: Parallel EPICS reads for capturing 40-50K PV values in seconds
+- **Distributed Architecture**: Separate processes for API, PV monitoring, and background tasks
+- **Fast Snapshot Creation**: Parallel EPICS reads or instant Redis cache reads (<5s for 40K PVs)
 - **Efficient Restore Operations**: Parallel EPICS writes for quick machine state restoration
+- **Real-Time Updates**: WebSocket streaming with diff-based updates and multi-instance support
 - **Tag-based Organization**: Group and categorize PVs using hierarchical tags
 - **Snapshot Comparison**: Compare two snapshots with tolerance-based diff
+- **Persistent Job Queue**: Background tasks survive restarts with automatic retries
+- **Circuit Breaker**: Fail-fast protection against unresponsive IOCs
 - **PostgreSQL Storage**: Reliable relational database with async support
-- **RESTful API**: Clean FastAPI endpoints with automatic OpenAPI documentation
 
 ## Technology Stack
 
@@ -19,7 +22,9 @@ High-performance Python FastAPI backend for EPICS control system snapshot/restor
 | Framework | FastAPI |
 | Database | PostgreSQL 16+ |
 | ORM | SQLAlchemy 2.0 (async) |
-| EPICS | PyEPICS (Channel Access) |
+| Cache/Queue | Redis 7+ |
+| Task Queue | Arq |
+| EPICS | aioca (async Channel Access) |
 | Migrations | Alembic |
 | Validation | Pydantic v2 |
 
@@ -27,9 +32,11 @@ High-performance Python FastAPI backend for EPICS control system snapshot/restor
 
 ## Quick Start
 
+**New here?** See [QUICKSTART.md](QUICKSTART.md) for a 2-minute setup guide!
+
 ### Option 1: Docker Compose (Recommended)
 
-The easiest way to get started is using Docker Compose, which sets up both the database and backend:
+The easiest way to get started with the full distributed architecture:
 
 ```bash
 # Clone the repository
@@ -45,73 +52,110 @@ docker exec squirrel-api alembic upgrade head
 ```
 
 This starts:
-- **PostgreSQL** on port `5432` (user: `squirrel`, password: `squirrel`)
-- **FastAPI backend** on port `8000` with hot reload
+- **PostgreSQL** on port `5432`
+- **Redis** on port `6379`
+- **API Server** on port `8080` (REST/WebSocket)
+- **PV Monitor** (1 replica) - EPICS monitoring process
+- **Workers** (2 replicas) - Background task processors
+
+The Docker Compose project is named **`squirrel`**, so containers are:
+- `squirrel-api`, `squirrel-db`, `squirrel-redis`, `squirrel-monitor`, `squirrel-worker-1`, `squirrel-worker-2`
 
 The API will be available at:
-- **API**: http://localhost:8000
-- **Swagger Docs**: http://localhost:8000/docs
-- **Health Check**: http://localhost:8000/health
+- **API**: http://localhost:8080
+- **Swagger Docs**: http://localhost:8080/docs
+- **Health Check**: http://localhost:8080/v1/health/summary
 
 To stop the services:
 ```bash
-docker-compose down
+docker compose down
 ```
 
 To reset the database (delete all data):
 ```bash
-docker-compose down -v
+docker compose down -v
 ```
 
-### Option 2: Local Development (Database in Docker)
+### Option 2: Legacy Mode (Single Process)
 
-Run just the database in Docker, with the backend running locally for faster development:
+For simpler deployments with embedded PV monitoring:
 
 ```bash
-# 1. Start only PostgreSQL
 cd docker
-docker-compose up -d db
+docker compose --profile legacy up backend db redis
+```
 
-# 2. Set up Python environment
+This runs the API with embedded PV monitor on port `8001`.
+
+**Note**: Workers are still required for snapshot creation. Start them separately:
+```bash
+docker compose up -d worker
+```
+
+### Option 3: Local Development
+
+Run infrastructure in Docker, services locally for faster development:
+
+```bash
+# 1. Start PostgreSQL and Redis
+cd docker
+docker compose up -d db redis
+
+# 2. Set up Python environment (or run ./setup.sh)
 cd ..
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e ".[dev]"
 
 # 3. Configure environment
 cp .env.example .env
-# Edit .env if needed (defaults work with docker-compose db)
+# Edit .env if needed (defaults work with docker compose)
 
 # 4. Run database migrations
 alembic upgrade head
 
-# 5. Start the backend with hot reload
-uvicorn app.main:app --reload --port 8000
+# 5. (Optional) Load test data
+python -m scripts.seed_pvs --count 100
+
+# 6. Start services (in separate terminals)
+uvicorn app.main:app --reload --port 8000      # API Server
+python -m app.monitor_main                      # PV Monitor
+arq app.worker.WorkerSettings                   # Worker (REQUIRED for snapshots)
 ```
 
-### Option 3: Full Local Setup
+**Important**: All three services must be running for full functionality:
+- **API**: Handles HTTP/WebSocket requests
+- **Monitor**: Maintains Redis cache of live PV values
+- **Worker**: Processes background jobs (snapshot creation/restore)
 
-If you have PostgreSQL installed locally:
+---
 
-```bash
-# 1. Create database
-createdb squirrel
+## Architecture Overview
 
-# 2. Set up Python environment
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# 3. Configure environment
-cp .env.example .env
-# Edit .env with your local PostgreSQL connection string
-
-# 4. Run migrations
-alembic upgrade head
-
-# 5. Start server
-uvicorn app.main:app --reload
 ```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   API Server    │     │   PV Monitor    │     │   Arq Worker    │
+│  (squirrel-api) │     │(squirrel-monitor)│     │(squirrel-worker)│
+│  REST/WebSocket │     │  EPICS → Redis  │     │  Snapshot jobs  │
+└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌────────────┴────────────┐
+                    ▼                         ▼
+            ┌─────────────┐           ┌─────────────┐
+            │    Redis    │           │  PostgreSQL │
+            │ Cache/Queue │           │   Storage   │
+            └─────────────┘           └─────────────┘
+                    │
+                    ▼
+            ┌─────────────┐
+            │  EPICS IOCs │
+            │  40-50K PVs │
+            └─────────────┘
+```
+
+For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
@@ -173,28 +217,21 @@ python -m scripts.seed_pvs --count 1000 --clear
 ```
 squirrel-backend/
 ├── app/
-│   ├── main.py              # FastAPI application entry point
+│   ├── main.py              # API entry point
+│   ├── monitor_main.py      # PV Monitor entry point
+│   ├── worker.py            # Arq worker configuration
 │   ├── config.py            # Configuration settings
-│   ├── api/v1/              # API endpoints (pvs, snapshots, tags)
+│   ├── api/v1/              # API endpoints
 │   ├── models/              # SQLAlchemy models
 │   ├── schemas/             # Pydantic schemas (DTOs)
 │   ├── services/            # Business logic layer
 │   ├── repositories/        # Data access layer
+│   ├── tasks/               # Arq task definitions
 │   └── db/                  # Database session management
 ├── alembic/                 # Database migrations
-│   └── versions/            # Migration files
 ├── tests/                   # Test suite
-│   ├── conftest.py          # Pytest fixtures
-│   ├── test_api/            # API integration tests
-│   ├── test_services/       # Service unit tests
-│   └── mocks/               # Mock services (EPICS)
 ├── docker/                  # Docker configuration
-│   ├── docker-compose.yml   # Full stack setup
-│   └── Dockerfile.dev       # Development image
 └── scripts/                 # Utility scripts
-    ├── upload_csv.py        # CSV data loader
-    ├── seed_pvs.py          # Test data generator
-    └── benchmark.py         # Performance testing
 ```
 
 ### Running Tests
@@ -211,7 +248,6 @@ pytest tests/test_api/test_pvs.py
 
 # Run with coverage report
 pytest --cov=app --cov-report=html
-# Open htmlcov/index.html in browser
 ```
 
 **Note**: Tests use a separate test database (`squirrel_test`). Create it first:
@@ -235,9 +271,6 @@ alembic downgrade -1
 
 # Show current migration status
 alembic current
-
-# Show migration history
-alembic history
 ```
 
 ### Code Quality
@@ -254,19 +287,6 @@ ruff check . --fix
 
 # Type checking
 mypy app/
-```
-
-### Performance Benchmarking
-
-```bash
-# Start the backend first, then run:
-python -m scripts.benchmark
-
-# With more iterations
-python -m scripts.benchmark --iterations 10
-
-# Skip restore benchmark (no EPICS writes)
-python -m scripts.benchmark --skip-restore
 ```
 
 ---
@@ -289,7 +309,7 @@ python -m scripts.benchmark --skip-restore
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/v1/snapshots` | List snapshots |
-| `POST` | `/v1/snapshots` | Create snapshot (reads from EPICS) |
+| `POST` | `/v1/snapshots` | Create snapshot (async, returns job ID) |
 | `GET` | `/v1/snapshots/{id}` | Get snapshot with all values |
 | `DELETE` | `/v1/snapshots/{id}` | Delete snapshot |
 | `POST` | `/v1/snapshots/{id}/restore` | Restore values to EPICS |
@@ -304,9 +324,42 @@ python -m scripts.benchmark --skip-restore
 | `GET` | `/v1/tags/{id}` | Get tag group with tags |
 | `PUT` | `/v1/tags/{id}` | Update tag group |
 | `DELETE` | `/v1/tags/{id}` | Delete tag group |
-| `POST` | `/v1/tags/{id}/tags` | Add tag to group |
-| `PUT` | `/v1/tags/{id}/tags/{tagId}` | Update tag |
-| `DELETE` | `/v1/tags/{id}/tags/{tagId}` | Remove tag |
+
+### Job Endpoints (`/v1/jobs`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/v1/jobs/{id}` | Get job status and progress |
+
+### Health Endpoints (`/v1/health`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/v1/health` | Overall health |
+| `GET` | `/v1/health/db` | Database connectivity |
+| `GET` | `/v1/health/redis` | Redis connectivity |
+| `GET` | `/v1/health/monitor/status` | PV monitor process health |
+| `GET` | `/v1/health/circuits` | Circuit breaker status |
+
+### WebSocket (`/ws`)
+
+Real-time PV value streaming with diff-based updates:
+
+```javascript
+const ws = new WebSocket('ws://localhost:8000/ws');
+
+// Subscribe to PVs
+ws.send(JSON.stringify({
+  action: 'subscribe',
+  pv_names: ['PV:NAME:1', 'PV:NAME:2']
+}));
+
+// Receive updates
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  // { pv_name: 'PV:NAME:1', value: 42.0, timestamp: '...' }
+};
+```
 
 ---
 
@@ -316,17 +369,40 @@ All configuration is via environment variables (with `SQUIRREL_` prefix):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SQUIRREL_DATABASE_URL` | `postgresql+asyncpg://squirrel:squirrel@localhost:5432/squirrel` | Database connection |
-| `SQUIRREL_DATABASE_POOL_SIZE` | `20` | Connection pool size |
+| `SQUIRREL_DATABASE_URL` | `postgresql+asyncpg://...` | Database connection |
+| `SQUIRREL_DATABASE_POOL_SIZE` | `30` | Connection pool size |
+| `SQUIRREL_REDIS_URL` | `redis://localhost:6379/0` | Redis connection |
 | `SQUIRREL_EPICS_CA_ADDR_LIST` | (empty) | EPICS CA address list |
-| `SQUIRREL_EPICS_CA_AUTO_ADDR_LIST` | `YES` | Auto-discover CA servers |
-| `SQUIRREL_EPICS_CA_CONN_TIMEOUT` | `2.0` | Connection timeout (seconds) |
-| `SQUIRREL_EPICS_CA_TIMEOUT` | `5.0` | Operation timeout (seconds) |
-| `SQUIRREL_EPICS_MAX_WORKERS` | `1000` | Thread pool size for parallel EPICS ops |
-| `SQUIRREL_EPICS_CHUNK_SIZE` | `1000` | PVs per batch in parallel operations |
+| `SQUIRREL_EPICS_CA_TIMEOUT` | `10.0` | Operation timeout (seconds) |
+| `SQUIRREL_EPICS_CHUNK_SIZE` | `1000` | PVs per batch in parallel ops |
+| `SQUIRREL_PV_MONITOR_BATCH_SIZE` | `500` | PVs per subscription batch |
+| `SQUIRREL_WATCHDOG_ENABLED` | `true` | Enable health monitoring |
+| `SQUIRREL_EMBEDDED_MONITOR` | `false` | Run monitor in API process |
 | `SQUIRREL_DEBUG` | `false` | Enable debug logging |
 
-See `.env.example` for a template.
+See `.env.example` for a complete template.
+
+### Docker-Specific Configuration
+
+For Docker Desktop on macOS/Windows, configure EPICS server DNS mappings:
+
+```bash
+# Copy the example file
+cp docker/.env.example docker/.env
+
+# Edit with your EPICS server hostnames and IPs
+# Get IPs with: host <hostname>
+```
+
+Example `docker/.env`:
+```bash
+COMPOSE_PROJECT_NAME=squirrel
+
+EPICS_HOST_PROD=your-epics-server:xxx.xxx.xxx.xxx
+EPICS_HOST_DMZ=your-dmz-server:xxx.xxx.xxx.xxx
+```
+
+**Note**: `docker/.env` is gitignored and should contain your site-specific configuration.
 
 ---
 
@@ -335,30 +411,37 @@ See `.env.example` for a template.
 ```bash
 # Start all services
 cd docker
-docker-compose up
+docker compose up
 
 # Start in background (detached)
-docker-compose up -d
+docker compose up -d
 
 # Rebuild images after code changes
-docker-compose up --build
+docker compose up --build
 
 # View logs
-docker-compose logs -f backend
-docker-compose logs -f db
+docker compose logs -f api
+docker compose logs -f monitor
+docker compose logs -f worker
 
 # Stop services
-docker-compose down
+docker compose down
 
 # Stop and remove volumes (reset database)
-docker-compose down -v
+docker compose down -v
+
+# Scale workers (for high load)
+docker compose up -d --scale worker=4
 
 # Execute command in running container
-docker exec -it squirrel-backend bash
+docker exec -it squirrel-api bash
 docker exec -it squirrel-db psql -U squirrel
 
 # Run migrations in Docker
-docker exec -it squirrel-backend alembic upgrade head
+docker exec -it squirrel-api alembic upgrade head
+
+# Load test data in Docker
+docker compose exec api python -m scripts.seed_pvs --count 100
 ```
 
 ---
@@ -368,7 +451,13 @@ docker exec -it squirrel-backend alembic upgrade head
 ### Database connection refused
 ```bash
 # Check if PostgreSQL is running
-docker-compose ps
+docker compose ps db
+
+# Check database health
+docker compose logs db
+
+# Test connection
+docker exec -it squirrel-db pg_isready -U squirrel
 # Or for local: pg_isready -h localhost -p 5432
 ```
 
@@ -390,13 +479,61 @@ echo $EPICS_CA_ADDR_LIST
 caget <pv_name>
 ```
 
+### PV Monitor not updating
+```bash
+# Check monitor health via API
+curl http://localhost:8000/v1/health/monitor/status
+
+# Check Redis for heartbeat
+docker exec -it squirrel-redis redis-cli GET squirrel:monitor:heartbeat
+```
+
+### Snapshots hanging or have no data
+```bash
+# Check if worker is running
+docker compose ps worker
+
+# If not running, start it
+docker compose up -d worker
+
+# Check worker logs
+docker compose logs -f worker
+
+# Verify worker is processing jobs
+docker exec -it squirrel-redis redis-cli LLEN arq:queue
+```
+
+**Note**: Snapshots will be empty if:
+- Test PVs don't exist on EPICS network (expected for development)
+- Monitor can't connect to PVs (check EPICS_CA_ADDR_LIST)
+- Redis cache is empty and direct EPICS reads fail
+
 ### Port already in use
 ```bash
-# Find process using port 8000
-lsof -i :8000
+# Find process using port 8080 (Docker) or 8000 (local)
+lsof -i :8080
 
-# Use different port
+# Change Docker port in docker-compose.yml:
+# ports:
+#   - "8081:8000"  # Change 8080 to 8081
+
+# Or use different port locally
 uvicorn app.main:app --reload --port 8001
+```
+
+---
+
+## Performance Benchmarking
+
+```bash
+# Start the backend first, then run:
+python -m scripts.benchmark
+
+# With more iterations
+python -m scripts.benchmark --iterations 10
+
+# Skip restore benchmark (no EPICS writes)
+python -m scripts.benchmark --skip-restore
 ```
 
 ---
@@ -404,7 +541,7 @@ uvicorn app.main:app --reload --port 8001
 ## Frontend
 
 The Squirrel React frontend is available at:
-- Repository: `/Users/yazar/projects/squirrel`
+- Repository: `squirrel` (separate repo)
 - Default API URL: `http://localhost:8000`
 
 Configure the frontend to point to this backend by setting the API base URL.
