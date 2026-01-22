@@ -42,12 +42,13 @@ class BaseAdapter(ABC):
     """
 
     @abstractmethod
-    async def get_single(self, pv_name: str) -> EpicsValue:
+    async def get_single(self, pv_name: str, timeout: float | None = None) -> EpicsValue:
         """
         Read a single PV with metadata.
 
         Args:
             pv_name: PV name (without protocol prefix)
+            timeout: Optional timeout override in seconds
 
         Returns:
             EpicsValue with value and metadata

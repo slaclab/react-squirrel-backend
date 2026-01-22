@@ -96,9 +96,10 @@ class CAAdapter(BaseAdapter):
         await connect(pv_names, timeout=self._conn_timeout, throw=False)
         logger.info(f"[CA] Pre-connected to {len(pv_names)} PVs")
 
-    async def get_single(self, pv_name: str) -> EpicsValue:
+    async def get_single(self, pv_name: str, timeout: float | None = None) -> EpicsValue:
         """Read a single CA PV with metadata."""
         ioc_name = self._extract_ioc_name(pv_name)
+        effective_timeout = timeout if timeout is not None else self._timeout
 
         # Check circuit breaker first
         if self._circuit_manager and self._circuit_manager.is_open(ioc_name):
@@ -110,7 +111,7 @@ class CAAdapter(BaseAdapter):
             )
 
         try:
-            result = await caget(pv_name, format=FORMAT_TIME, timeout=self._timeout, throw=False)
+            result = await caget(pv_name, format=FORMAT_TIME, timeout=effective_timeout, throw=False)
             epics_value = self._augmented_to_epics_value(pv_name, result)
 
             # Record success/failure with circuit breaker

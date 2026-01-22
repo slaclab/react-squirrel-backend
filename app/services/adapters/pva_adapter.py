@@ -3,6 +3,9 @@ PV Access (PVA) protocol adapter using p4p.
 
 This adapter wraps the p4p library to provide PVA protocol support
 within the unified protocol adapter framework.
+
+If p4p is not installed, this adapter gracefully degrades and returns
+error responses for all operations.
 """
 
 import asyncio
@@ -10,14 +13,30 @@ import logging
 from typing import Any
 from datetime import datetime
 
-from p4p.client.thread import Context, Disconnected
-from p4p.client.thread import TimeoutError as P4PTimeoutError
-
 from app.config import get_settings
 from app.services.adapters.base_adapter import EpicsValue, BaseAdapter
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Gracefully handle missing p4p dependency
+_P4P_AVAILABLE = False
+Context = None
+Disconnected = None
+P4PTimeoutError = None
+
+try:
+    from p4p.client.thread import Context, Disconnected
+    from p4p.client.thread import TimeoutError as P4PTimeoutError
+
+    _P4P_AVAILABLE = True
+except ImportError:
+    logger.warning("[PVA] p4p library not installed. PVA protocol support disabled. " "Install with: pip install p4p")
+
+
+def is_pva_available() -> bool:
+    """Check if PVA protocol support is available."""
+    return _P4P_AVAILABLE
 
 
 class PVAAdapter(BaseAdapter):
@@ -26,12 +45,20 @@ class PVAAdapter(BaseAdapter):
 
     This adapter handles all PVA-specific operations including structured
     data types (NTScalar, NTTable, etc.) and metadata extraction.
+
+    If p4p is not installed, all operations return error responses.
     """
 
     def __init__(self, enable_circuit_breaker: bool = True):
         self._timeout = settings.epics_pva_timeout
         self._enable_circuit_breaker = enable_circuit_breaker
         self._circuit_manager = None
+        self._context = None
+        self._available = _P4P_AVAILABLE
+
+        if not self._available:
+            logger.warning("[PVA] Adapter initialized in degraded mode (p4p not installed)")
+            return
 
         # Initialize p4p Context for PVA operations
         # Using 'pva' provider for PV Access protocol
@@ -161,16 +188,29 @@ class PVAAdapter(BaseAdapter):
 
         Note: p4p doesn't have explicit pre-connect, so this is a no-op.
         """
+        if not self._available:
+            return False
         # p4p handles connections automatically on first operation
         return True
 
     async def connect_many(self, pv_names: list[str]) -> None:
         """Pre-connect to multiple PVA PVs (no-op for p4p)."""
+        if not self._available:
+            logger.warning(f"[PVA] Cannot pre-connect {len(pv_names)} PVs - p4p not installed")
+            return
         logger.info(f"[PVA] Pre-connect request for {len(pv_names)} PVs (no-op)")
 
-    async def get_single(self, pv_name: str) -> EpicsValue:
+    async def get_single(self, pv_name: str, timeout: float | None = None) -> EpicsValue:
         """Read a single PVA PV with metadata."""
+        if not self._available:
+            return EpicsValue(
+                value=None,
+                connected=False,
+                error="PVA protocol not available (p4p not installed)",
+            )
+
         ioc_name = self._extract_ioc_name(pv_name)
+        effective_timeout = timeout if timeout is not None else self._timeout
 
         # Check circuit breaker first
         if self._circuit_manager and self._circuit_manager.is_open(ioc_name):
@@ -184,7 +224,7 @@ class PVAAdapter(BaseAdapter):
         try:
             # Run blocking p4p operation in thread pool
             # p4p Context.get() is synchronous, so we use asyncio.to_thread
-            pva_value = await asyncio.to_thread(self._context.get, pv_name, timeout=self._timeout)
+            pva_value = await asyncio.to_thread(self._context.get, pv_name, timeout=effective_timeout)
 
             epics_value = self._extract_epics_value_from_pva(pv_name, pva_value)
 
@@ -227,17 +267,26 @@ class PVAAdapter(BaseAdapter):
         # Create tasks for parallel fetching
         tasks = [self.get_single(pv_name) for pv_name in pv_names]
 
-        # Wait for all tasks to complete
-        results_list = await asyncio.gather(*tasks, return_exceptions=False)
+        # Wait for all tasks to complete, capturing exceptions per-task
+        results_list = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Build results dictionary
-        results = {pv_name: result for pv_name, result in zip(pv_names, results_list)}
+        # Build results dictionary, handling any exceptions
+        results = {}
+        for pv_name, result in zip(pv_names, results_list):
+            if isinstance(result, Exception):
+                logger.error(f"[PVA] Exception getting {pv_name}: {result}")
+                results[pv_name] = EpicsValue(value=None, connected=False, error=str(result))
+            else:
+                results[pv_name] = result
 
         logger.info(f"[PVA] Completed get_many: {len(results)}/{len(pv_names)} PVs")
         return results
 
     async def put_single(self, pv_name: str, value: Any) -> tuple[bool, str | None]:
         """Write a value to a single PVA PV."""
+        if not self._available:
+            return False, "PVA protocol not available (p4p not installed)"
+
         try:
             # Run blocking p4p operation in thread pool
             await asyncio.to_thread(self._context.put, pv_name, value, timeout=self._timeout)
@@ -261,22 +310,29 @@ class PVAAdapter(BaseAdapter):
 
         Since p4p doesn't have batch put, we write in parallel using tasks.
         """
-        results = {}
-
         # Create tasks for parallel writes
         tasks = [self.put_single(pv_name, value) for pv_name, value in values.items()]
         pv_names = list(values.keys())
 
-        # Wait for all tasks to complete
-        results_list = await asyncio.gather(*tasks, return_exceptions=False)
+        # Wait for all tasks to complete, capturing exceptions per-task
+        results_list = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Build results dictionary
-        results = {pv_name: result for pv_name, result in zip(pv_names, results_list)}
+        # Build results dictionary, handling any exceptions
+        results = {}
+        for pv_name, result in zip(pv_names, results_list):
+            if isinstance(result, Exception):
+                logger.error(f"[PVA] Exception putting {pv_name}: {result}")
+                results[pv_name] = (False, str(result))
+            else:
+                results[pv_name] = result
 
         return results
 
     async def shutdown(self):
         """Cleanup PVA adapter resources."""
+        if not self._available or self._context is None:
+            return
+
         try:
             # Close p4p context
             self._context.close()

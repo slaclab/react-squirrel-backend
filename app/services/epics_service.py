@@ -6,7 +6,7 @@ from collections.abc import Callable
 from app.config import get_settings
 from app.services.protocol_parser import parse_pv_address, group_by_protocol
 from app.services.adapters.ca_adapter import CAAdapter
-from app.services.adapters.pva_adapter import PVAAdapter
+from app.services.adapters.pva_adapter import PVAAdapter, is_pva_available
 from app.services.adapters.base_adapter import EpicsValue, BaseAdapter
 
 logger = logging.getLogger(__name__)
@@ -47,8 +47,11 @@ class EpicsService:
             "pva": PVAAdapter(enable_circuit_breaker=enable_circuit_breaker),
         }
 
+        # Log initialization status including PVA availability
+        pva_status = "available" if is_pva_available() else "unavailable (p4p not installed)"
         logger.info(
-            f"EpicsService initialized with protocols: {list(self._adapters.keys())}, default={self._default_protocol}"
+            f"EpicsService initialized with protocols: {list(self._adapters.keys())}, "
+            f"default={self._default_protocol}, PVA status={pva_status}"
         )
 
     def _get_adapter(self, protocol: str) -> BaseAdapter:
@@ -74,11 +77,11 @@ class EpicsService:
 
         logger.info(f"Pre-connected to {len(pv_addresses)} PVs across protocols")
 
-    async def get_single(self, pv_address: str) -> EpicsValue:
+    async def get_single(self, pv_address: str, timeout: float | None = None) -> EpicsValue:
         """Read a single PV with protocol detection."""
         parsed = parse_pv_address(pv_address, self._default_protocol)
         adapter = self._get_adapter(parsed.protocol)
-        return await adapter.get_single(parsed.pv_name)
+        return await adapter.get_single(parsed.pv_name, timeout=timeout)
 
     async def get_many(self, pv_addresses: list[str]) -> dict[str, EpicsValue]:
         """

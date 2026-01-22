@@ -4,7 +4,6 @@ import logging
 from typing import Any
 
 from aioca import CANothing, camonitor
-from p4p.client.thread import Context, Disconnected
 
 from app.config import get_settings
 from app.services.redis_service import PVCacheEntry, RedisService
@@ -12,6 +11,18 @@ from app.services.protocol_parser import parse_pv_address, group_by_protocol
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Gracefully handle missing p4p dependency
+_P4P_AVAILABLE = False
+Context = None
+Disconnected = None
+
+try:
+    from p4p.client.thread import Context, Disconnected
+
+    _P4P_AVAILABLE = True
+except ImportError:
+    logger.warning("[PVA] p4p library not installed. PVA monitoring disabled. " "Install with: pip install p4p")
 
 
 class PVMonitor:
@@ -41,6 +52,7 @@ class PVMonitor:
 
         # PVA context for monitoring
         self._pva_context: Context | None = None
+        self._pva_context_lock: asyncio.Lock = asyncio.Lock()
 
         # Configuration from settings
         self._batch_size = settings.pv_monitor_batch_size
@@ -66,8 +78,11 @@ class PVMonitor:
         total = len(pv_addresses)
         logger.info(f"Starting PV Monitor for {total} PVs (batch size: {self._batch_size})")
 
-        # Initialize PVA context
-        self._pva_context = Context("pva")
+        # Initialize PVA context (if p4p is available)
+        if _P4P_AVAILABLE:
+            self._pva_context = Context("pva")
+        else:
+            self._pva_context = None
 
         # Start the batch update processor
         self._batch_task = asyncio.create_task(self._process_update_queue())
@@ -95,12 +110,21 @@ class PVMonitor:
             logger.info(f"Starting {len(ca_addresses)} CA monitors...")
             ca_started, ca_failed = await self._start_ca_monitors_batched(ca_addresses)
 
-        # Start PVA monitors
+        # Start PVA monitors (if p4p is available)
         pva_started = 0
         pva_failed = 0
         if pva_addresses:
-            logger.info(f"Starting {len(pva_addresses)} PVA monitors...")
-            pva_started, pva_failed = await self._start_pva_monitors_batched(pva_addresses)
+            if _P4P_AVAILABLE:
+                logger.info(f"Starting {len(pva_addresses)} PVA monitors...")
+                pva_started, pva_failed = await self._start_pva_monitors_batched(pva_addresses)
+            else:
+                logger.warning(f"Cannot start {len(pva_addresses)} PVA monitors - p4p not installed")
+                pva_failed = len(pva_addresses)
+                # Mark all PVA PVs as disconnected
+                for pv_address in pva_addresses:
+                    await self._redis.set_pv_connected(
+                        pv_address, connected=False, error="PVA protocol not available (p4p not installed)"
+                    )
 
         self._monitored_pvs = set(pv_addresses)
         total_started = ca_started + pva_started
@@ -223,6 +247,10 @@ class PVMonitor:
 
         Returns True if monitor started successfully, False otherwise.
         """
+        if not _P4P_AVAILABLE or self._pva_context is None:
+            logger.warning(f"[PVA] Cannot start monitor for {pv_address} - p4p not available")
+            return False
+
         try:
             # Parse to get PV name without protocol prefix
             parsed = parse_pv_address(pv_address, self._default_protocol)
@@ -321,8 +349,8 @@ class PVMonitor:
         try:
             now = time.time()
 
-            # Handle disconnection
-            if isinstance(value, Disconnected):
+            # Handle disconnection (check Disconnected type is available)
+            if Disconnected is not None and isinstance(value, Disconnected):
                 logger.warning(f"[PVA] PV disconnected: {pv_address}")
                 entry = PVCacheEntry(
                     value=None,
@@ -504,6 +532,52 @@ class PVMonitor:
 
         logger.info("PV Monitor stopped")
 
+    async def _reconnect_pva_context(self) -> bool:
+        """
+        Reconnect the PVA context if it becomes stale.
+
+        This creates a new p4p Context and restarts all PVA monitors.
+        Returns True if reconnection was successful.
+        """
+        if not _P4P_AVAILABLE:
+            return False
+
+        async with self._pva_context_lock:
+            logger.info("[PVA] Attempting to reconnect PVA context...")
+
+            # Close old context
+            if self._pva_context is not None:
+                try:
+                    self._pva_context.close()
+                except Exception as e:
+                    logger.warning(f"[PVA] Error closing old context: {e}")
+
+            # Create new context
+            try:
+                self._pva_context = Context("pva")
+                logger.info("[PVA] New context created successfully")
+            except Exception as e:
+                logger.error(f"[PVA] Failed to create new context: {e}")
+                self._pva_context = None
+                return False
+
+            # Close all existing PVA subscriptions
+            pva_addresses = list(self._pva_subscriptions.keys())
+            for pv_address in pva_addresses:
+                try:
+                    self._pva_subscriptions[pv_address].close()
+                except Exception:
+                    pass
+            self._pva_subscriptions.clear()
+
+            # Restart all PVA monitors
+            if pva_addresses:
+                logger.info(f"[PVA] Restarting {len(pva_addresses)} monitors with new context...")
+                started, failed = await self._start_pva_monitors_batched(pva_addresses)
+                logger.info(f"[PVA] Context reconnection complete: {started} monitors restarted, {failed} failed")
+
+            return True
+
     async def restart_monitor(self, pv_address: str) -> bool:
         """
         Restart monitoring for a specific PV.
@@ -533,6 +607,13 @@ class PVMonitor:
             success = await self._start_ca_monitor(pv_address)
         else:  # pva
             success = await self._start_pva_monitor(pv_address)
+            # If PVA monitor fails, try reconnecting the context
+            if not success and _P4P_AVAILABLE:
+                logger.warning(f"[PVA] Monitor start failed for {pv_address}, attempting context reconnection...")
+                reconnected = await self._reconnect_pva_context()
+                if reconnected:
+                    # Try starting the monitor again with new context
+                    success = await self._start_pva_monitor(pv_address)
 
         if success:
             logger.info(f"Restarted monitor for {pv_address} (protocol: {protocol})")
@@ -585,10 +666,17 @@ class PVMonitor:
                 ca_addresses = [orig_addr for orig_addr, _ in grouped["ca"]]
                 await self._start_ca_monitors_batched(ca_addresses)
 
-            # Add PVA monitors
+            # Add PVA monitors (if p4p is available)
             if "pva" in grouped:
                 pva_addresses = [orig_addr for orig_addr, _ in grouped["pva"]]
-                await self._start_pva_monitors_batched(pva_addresses)
+                if _P4P_AVAILABLE:
+                    await self._start_pva_monitors_batched(pva_addresses)
+                else:
+                    logger.warning(f"Cannot add {len(pva_addresses)} PVA monitors - p4p not installed")
+                    for pv_address in pva_addresses:
+                        await self._redis.set_pv_connected(
+                            pv_address, connected=False, error="PVA protocol not available (p4p not installed)"
+                        )
 
         self._monitored_pvs = new_pvs
         logger.info(f"Refreshed PV list: added {len(to_add)}, removed {len(to_remove)}, " f"total {len(new_pvs)}")
@@ -613,10 +701,25 @@ class PVMonitor:
             "active_subscriptions": self.get_active_subscription_count(),
             "ca_subscriptions": len(self._ca_subscriptions),
             "pva_subscriptions": len(self._pva_subscriptions),
+            "pva_available": _P4P_AVAILABLE,
+            "pva_context_active": self._pva_context is not None,
             "queue_size": self._update_queue.qsize(),
             "batch_size": self._batch_size,
             "heartbeat_interval": self._heartbeat_interval,
         }
+
+    async def reconnect_pva(self) -> bool:
+        """
+        Manually trigger PVA context reconnection.
+
+        This can be called if PVA monitors are experiencing issues.
+        Returns True if reconnection was successful.
+        """
+        if not _P4P_AVAILABLE:
+            logger.warning("[PVA] Cannot reconnect - p4p not available")
+            return False
+
+        return await self._reconnect_pva_context()
 
 
 # Singleton instance
