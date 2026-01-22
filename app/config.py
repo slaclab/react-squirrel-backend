@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     epics_ca_timeout: float = 10.0  # Read timeout (includes connection time for batch reads)
     epics_chunk_size: int = 1000  # Batch size for progress updates (smaller for better connection handling)
 
+    # EPICS Protocol Configuration
+    epics_default_protocol: str = "ca"  # Default protocol for addresses without prefix ("ca" or "pva")
+    epics_pva_server_port: str = "5075"  # PVA server port
+    epics_pva_timeout: float = 10.0  # PVA read timeout
+
     # Redis configuration
     redis_url: str = "redis://localhost:6379/0"
     redis_pv_cache_ttl: int = 60  # seconds
