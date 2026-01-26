@@ -34,11 +34,18 @@ class PVService:
         )
 
     async def search_paged(
-        self, search: str | None = None, page_size: int = 100, continuation_token: str | None = None
+        self,
+        search: str | None = None,
+        page_size: int = 100,
+        continuation_token: str | None = None,
+        tag_filters: dict[str, list[str]] | None = None,
     ) -> PagedResult[PVElementDTO]:
         """Search PVs with pagination."""
         pvs, next_token, total_count = await self.pv_repo.search_by_name(
-            search=search, limit=page_size, continuation_token=continuation_token
+            search=search,
+            limit=page_size,
+            continuation_token=continuation_token,
+            tag_filters=tag_filters,
         )
 
         return PagedResult(
