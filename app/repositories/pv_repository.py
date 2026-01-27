@@ -2,7 +2,7 @@ from sqlalchemy import or_, func, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.pv import PV
+from app.models.pv import PV, pv_tag
 from app.models.tag import Tag
 from app.repositories.base import BaseRepository
 
@@ -23,7 +23,11 @@ class PVRepository(BaseRepository[PV]):
         return result.scalar_one_or_none()
 
     async def search_by_name(
-        self, search: str | None = None, limit: int = 100, continuation_token: str | None = None
+        self,
+        search: str | None = None,
+        limit: int = 100,
+        continuation_token: str | None = None,
+        tag_filters: dict[str, list[str]] | None = None,
     ) -> tuple[list[PV], str | None, int]:
         """
         Search PVs with pagination using continuation tokens.
@@ -45,6 +49,15 @@ class PVRepository(BaseRepository[PV]):
             )
             query = query.where(search_filter)
             count_query = count_query.where(search_filter)
+
+        # Apply tag filters: OR within group, AND across groups
+        if tag_filters:
+            for group_id, tag_ids in tag_filters.items():
+                if tag_ids:
+                    # Subquery: PVs that have at least one of the tags in this group
+                    subquery = select(pv_tag.c.pv_id).where(pv_tag.c.tag_id.in_(tag_ids)).distinct()
+                    query = query.where(PV.id.in_(subquery))
+                    count_query = count_query.where(PV.id.in_(subquery))
 
         # Apply continuation token (ID-based pagination)
         if continuation_token:

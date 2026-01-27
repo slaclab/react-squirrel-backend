@@ -1,4 +1,5 @@
 import os
+import json
 
 from fastapi import Query, Depends, APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,11 +28,35 @@ async def search_pvs_paged(
     pvName: str | None = Query(None),
     pageSize: int = Query(100, ge=1, le=1000),
     continuationToken: str | None = Query(None),
+    tagFilters: str | None = Query(None, description="JSON object: {groupId: [tagId1, tagId2], ...}"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Search PVs with pagination."""
+    """
+    Search PVs with pagination and optional tag filtering.
+
+    Example tagFilters: {"group-1": ["tag-a", "tag-b"], "group-2": ["tag-c"]}
+    This returns PVs that have (tag-a OR tag-b) AND (tag-c)
+    """
     service = PVService(db)
-    result = await service.search_paged(search=pvName, page_size=pageSize, continuation_token=continuationToken)
+
+    # Parse tag filters from JSON string
+    tag_filters = None
+    if tagFilters:
+        try:
+            tag_filters = json.loads(tagFilters)
+            if not tag_filters:
+                tag_filters = None
+        except json.JSONDecodeError as e:
+            raise APIException(400, f"Invalid tagFilters JSON: {e}", 400)
+        except ValueError as e:
+            raise APIException(400, str(e), 400)
+
+    result = await service.search_paged(
+        search=pvName,
+        page_size=pageSize,
+        continuation_token=continuationToken,
+        tag_filters=tag_filters,
+    )
     return success_response(result)
 
 
