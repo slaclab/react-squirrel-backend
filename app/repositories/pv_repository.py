@@ -1,4 +1,4 @@
-from sqlalchemy import or_, func, select, and_
+from sqlalchemy import or_, func, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,11 +55,7 @@ class PVRepository(BaseRepository[PV]):
             for group_id, tag_ids in tag_filters.items():
                 if tag_ids:
                     # Subquery: PVs that have at least one of the tags in this group
-                    subquery = (
-                        select(pv_tag.c.pv_id)
-                        .where(pv_tag.c.tag_id.in_(tag_ids))
-                        .distinct()
-                    )
+                    subquery = select(pv_tag.c.pv_id).where(pv_tag.c.tag_id.in_(tag_ids)).distinct()
                     query = query.where(PV.id.in_(subquery))
                     count_query = count_query.where(PV.id.in_(subquery))
 
