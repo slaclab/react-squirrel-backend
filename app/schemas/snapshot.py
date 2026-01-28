@@ -71,6 +71,13 @@ class SnapshotDTO(SnapshotSummaryDTO):
     pvValues: list[PVValueDTO] = []
 
 
+class UpdateSnapshotDTO(BaseModel):
+    """DTO for updating snapshot metadata."""
+
+    title: str | None = Field(None, min_length=1, max_length=255)
+    comment: str | None = None
+
+
 class RestoreRequestDTO(BaseModel):
     """Request to restore PV values from a snapshot."""
 

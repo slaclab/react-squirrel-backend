@@ -10,7 +10,7 @@ from app.db.session import get_db
 from app.models.job import JobType
 from app.schemas.job import JobCreatedDTO
 from app.api.responses import APIException, success_response
-from app.schemas.snapshot import NewSnapshotDTO, RestoreRequestDTO
+from app.schemas.snapshot import NewSnapshotDTO, UpdateSnapshotDTO, RestoreRequestDTO
 from app.services.job_service import JobService
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
@@ -154,6 +154,27 @@ async def create_snapshot(
             snapshot = await service.create_snapshot(data)
 
         return success_response(snapshot)
+
+@router.put("/{snapshot_id}", response_model=dict)
+async def update_snapshot(
+    snapshot_id: str,
+    data: UpdateSnapshotDTO,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update snapshot title and/or comment."""
+    epics = get_epics_service()
+    service = SnapshotService(db, epics)
+
+    snapshot = await service.update_snapshot_metadata(
+        snapshot_id,
+        title=data.title,
+        comment=data.comment,
+    )
+
+    if not snapshot:
+        raise APIException(404, f"Snapshot {snapshot_id} not found", 404)
+
+    return success_response(snapshot)
 
 
 @router.post("/{snapshot_id}/restore", response_model=dict)

@@ -49,6 +49,38 @@ class SnapshotRepository(BaseRepository[Snapshot]):
 
         return snapshot
 
+    async def update_metadata(
+        self,
+        snapshot_id: str,
+        *,
+        title: str | None = None,
+        comment: str | None = None,
+    ) -> Snapshot | None:
+        """
+        Update snapshot metadata (title and/or comment).
+
+        Args:
+            snapshot_id: The snapshot ID
+            title: Optional new title
+            comment: Optional new comment
+        """
+        result = await self.session.execute(
+            select(Snapshot).where(Snapshot.id == snapshot_id)
+        )
+        snapshot = result.scalar_one_or_none()
+
+        if not snapshot:
+            return None
+
+        if title is not None:
+            snapshot.title = title
+
+        if comment is not None:
+            snapshot.comment = comment
+
+        await self.session.flush()
+        return snapshot
+
     async def search(
         self, title: str | None = None, tag_ids: list[str] | None = None, limit: int = 100
     ) -> list[Snapshot]:

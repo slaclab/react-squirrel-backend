@@ -179,6 +179,36 @@ class SnapshotService:
             pvCount=total_count,
             pvValues=pv_values,
         )
+        
+    async def update_snapshot_metadata(
+        self,
+        snapshot_id: str,
+        title: str | None = None,
+        comment: str | None = None,
+    ) -> SnapshotSummaryDTO | None:
+        """
+        Update snapshot title and/or comment.
+        """
+        snapshot = await self.snapshot_repo.update_metadata(
+            snapshot_id,
+            title=title,
+            comment=comment,
+        )
+
+        if not snapshot:
+            return None
+
+        # Get updated PV count (matches list/get behavior)
+        pv_count = await self.snapshot_repo.get_value_count(snapshot.id)
+
+        return SnapshotSummaryDTO(
+            id=snapshot.id,
+            title=snapshot.title,
+            comment=snapshot.comment,
+            createdDate=snapshot.created_at,
+            createdBy=snapshot.created_by,
+            pvCount=pv_count,
+        )
 
     async def create_snapshot(
         self, data: NewSnapshotDTO, created_by: str | None = None, progress_callback: Callable | None = None
