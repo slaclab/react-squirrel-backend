@@ -17,7 +17,7 @@ class Snapshot(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "snapshot"
 
     title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Relationships

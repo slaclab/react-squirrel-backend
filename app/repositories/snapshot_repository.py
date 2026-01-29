@@ -54,15 +54,15 @@ class SnapshotRepository(BaseRepository[Snapshot]):
         snapshot_id: str,
         *,
         title: str | None = None,
-        comment: str | None = None,
+        description: str | None = None,
     ) -> Snapshot | None:
         """
-        Update snapshot metadata (title and/or comment).
+        Update snapshot metadata (title and/or description).
 
         Args:
             snapshot_id: The snapshot ID
             title: Optional new title
-            comment: Optional new comment
+            description: Optional new description
         """
         result = await self.session.execute(
             select(Snapshot).where(Snapshot.id == snapshot_id)
@@ -75,8 +75,8 @@ class SnapshotRepository(BaseRepository[Snapshot]):
         if title is not None:
             snapshot.title = title
 
-        if comment is not None:
-            snapshot.comment = comment
+        if description is not None:
+            snapshot.description = description
 
         await self.session.flush()
         return snapshot

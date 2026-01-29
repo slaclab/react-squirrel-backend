@@ -101,7 +101,7 @@ async def create_snapshot(
         # Create a job record
         job_service = JobService(db)
         job = await job_service.create_job(
-            JobType.SNAPSHOT_CREATE, job_data={"title": data.title, "comment": data.comment, "use_cache": use_cache}
+            JobType.SNAPSHOT_CREATE, job_data={"title": data.title, "description": data.description, "use_cache": use_cache}
         )
 
         # CRITICAL: Commit the job to database before returning
@@ -117,7 +117,7 @@ async def create_snapshot(
                         "create_snapshot_task",
                         job_id=str(job.id),
                         title=data.title,
-                        comment=data.comment,
+                        description=data.description,
                         use_cache=use_cache,
                     )
                     logger.info(f"Enqueued snapshot job to Arq: {job.id}")
@@ -132,7 +132,7 @@ async def create_snapshot(
                     logger.warning(f"Failed to enqueue to Arq, falling back to BackgroundTasks: {e}")
 
         # Fallback to FastAPI BackgroundTasks
-        background_tasks.add_task(run_snapshot_creation, job.id, data.title, data.comment, use_cache)
+        background_tasks.add_task(run_snapshot_creation, job.id, data.title, data.description, use_cache)
         logger.info(f"Scheduled snapshot job via BackgroundTasks: {job.id}")
 
         return success_response(
@@ -161,14 +161,14 @@ async def update_snapshot(
     data: UpdateSnapshotDTO,
     db: AsyncSession = Depends(get_db),
 ):
-    """Update snapshot title and/or comment."""
+    """Update snapshot title and/or description."""
     epics = get_epics_service()
     service = SnapshotService(db, epics)
 
     snapshot = await service.update_snapshot_metadata(
         snapshot_id,
         title=data.title,
-        comment=data.comment,
+        description=data.description,
     )
 
     if not snapshot:

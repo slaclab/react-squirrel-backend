@@ -21,7 +21,7 @@ class TestSnapshotCreate:
                 mock_epics.set_mock_value(pv["readbackAddress"], 99.5)
 
         response = await client.post(
-            "/v1/snapshots", json={"title": "Test Snapshot Creation", "comment": "Testing snapshot functionality"}
+            "/v1/snapshots", json={"title": "Test Snapshot Creation", "description": "Testing snapshot functionality"}
         )
 
         assert response.status_code == 200
@@ -49,7 +49,7 @@ class TestSnapshotCreate:
     @pytest.mark.asyncio
     async def test_create_snapshot_requires_title(self, client: AsyncClient):
         """Test that snapshot title is required."""
-        response = await client.post("/v1/snapshots", json={"comment": "No title provided"})
+        response = await client.post("/v1/snapshots", json={"description": "No title provided"})
 
         assert response.status_code == 422  # Validation error
 

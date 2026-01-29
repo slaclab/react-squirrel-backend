@@ -115,7 +115,7 @@ class SnapshotService:
                 SnapshotSummaryDTO(
                     id=snap.id,
                     title=snap.title,
-                    comment=snap.comment,
+                    description=snap.description,
                     createdDate=snap.created_at,
                     createdBy=snap.created_by,
                     pvCount=counts.get(snap.id, 0),
@@ -173,7 +173,7 @@ class SnapshotService:
         return SnapshotDTO(
             id=snapshot.id,
             title=snapshot.title,
-            comment=snapshot.comment,
+            description=snapshot.description,
             createdDate=snapshot.created_at,
             createdBy=snapshot.created_by,
             pvCount=total_count,
@@ -184,15 +184,15 @@ class SnapshotService:
         self,
         snapshot_id: str,
         title: str | None = None,
-        comment: str | None = None,
+        description: str | None = None,
     ) -> SnapshotSummaryDTO | None:
         """
-        Update snapshot title and/or comment.
+        Update snapshot title and/or description.
         """
         snapshot = await self.snapshot_repo.update_metadata(
             snapshot_id,
             title=title,
-            comment=comment,
+            description=description,
         )
 
         if not snapshot:
@@ -204,7 +204,7 @@ class SnapshotService:
         return SnapshotSummaryDTO(
             id=snapshot.id,
             title=snapshot.title,
-            comment=snapshot.comment,
+            description=snapshot.description,
             createdDate=snapshot.created_at,
             createdBy=snapshot.created_by,
             pvCount=pv_count,
@@ -263,7 +263,7 @@ class SnapshotService:
                 await progress_callback(len(all_addresses), len(all_addresses), "Processing results...")
 
             # Create snapshot record
-            snapshot = Snapshot(title=data.title, comment=data.comment, created_by=created_by)
+            snapshot = Snapshot(title=data.title, description=data.description, created_by=created_by)
             snapshot = await self.snapshot_repo.create(snapshot)
 
             # Build snapshot values
@@ -344,7 +344,7 @@ class SnapshotService:
             return SnapshotSummaryDTO(
                 id=snapshot.id,
                 title=snapshot.title,
-                comment=snapshot.comment,
+                description=snapshot.description,
                 createdDate=snapshot.created_at,
                 createdBy=snapshot.created_by,
                 pvCount=len(snapshot_values),
@@ -390,7 +390,7 @@ class SnapshotService:
             logger.info(f"Cache read completed in {(read_time - start_time).total_seconds():.2f}s")
 
             # Create snapshot record
-            snapshot = Snapshot(title=data.title, comment=data.comment, created_by=created_by)
+            snapshot = Snapshot(title=data.title, description=data.description, created_by=created_by)
             snapshot = await self.snapshot_repo.create(snapshot)
             # CRITICAL: Commit the snapshot before bulk insert
             # bulk_create_fast uses asyncpg (different connection), so the snapshot
@@ -503,7 +503,7 @@ class SnapshotService:
             return SnapshotSummaryDTO(
                 id=snapshot.id,
                 title=snapshot.title,
-                comment=snapshot.comment,
+                description=snapshot.description,
                 createdDate=snapshot.created_at,
                 createdBy=snapshot.created_by,
                 pvCount=count,

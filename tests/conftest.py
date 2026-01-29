@@ -164,6 +164,6 @@ async def sample_snapshot(client: AsyncClient, sample_pvs: list[dict], mock_epic
         if pv.get("readbackAddress"):
             mock_epics.set_mock_value(pv["readbackAddress"], 41.8)
 
-    response = await client.post("/v1/snapshots", json={"title": "Test Snapshot", "comment": "Snapshot for unit tests"})
+    response = await client.post("/v1/snapshots", json={"title": "Test Snapshot", "description": "Snapshot for unit tests"})
     assert response.status_code == 200
     return response.json()["payload"]
