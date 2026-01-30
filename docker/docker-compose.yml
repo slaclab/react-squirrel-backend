@@ -19,10 +19,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: squirrel-redis
+    command: redis-server --requirepass squirrel
     ports:
       - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "squirrel", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -36,7 +37,7 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       SQUIRREL_DATABASE_URL: postgresql+asyncpg://squirrel:squirrel@db:5432/squirrel
-      SQUIRREL_REDIS_URL: redis://redis:6379/0
+      SQUIRREL_REDIS_URL: redis://:squirrel@redis:6379/0
       SQUIRREL_DEBUG: "true"
       # EPICS environment for SLAC prod access from dev network
       EPICS_CA_AUTO_ADDR_LIST: "NO"
@@ -75,7 +76,7 @@ services:
     command: python -m app.monitor_main
     environment:
       SQUIRREL_DATABASE_URL: postgresql+asyncpg://squirrel:squirrel@db:5432/squirrel
-      SQUIRREL_REDIS_URL: redis://redis:6379/0
+      SQUIRREL_REDIS_URL: redis://:squirrel@redis:6379/0
       SQUIRREL_DEBUG: "true"
       # EPICS environment
       EPICS_CA_AUTO_ADDR_LIST: "NO"
@@ -116,7 +117,7 @@ services:
     command: arq app.worker.WorkerSettings
     environment:
       SQUIRREL_DATABASE_URL: postgresql+asyncpg://squirrel:squirrel@db:5432/squirrel
-      SQUIRREL_REDIS_URL: redis://redis:6379/0
+      SQUIRREL_REDIS_URL: redis://:squirrel@redis:6379/0
       SQUIRREL_DEBUG: "true"
       # EPICS environment (needed for snapshot restore)
       EPICS_CA_AUTO_ADDR_LIST: "NO"
@@ -147,7 +148,7 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       SQUIRREL_DATABASE_URL: postgresql+asyncpg://squirrel:squirrel@db:5432/squirrel
-      SQUIRREL_REDIS_URL: redis://redis:6379/0
+      SQUIRREL_REDIS_URL: redis://:squirrel@redis:6379/0
       SQUIRREL_DEBUG: "true"
       # Enable embedded monitor for backward compatibility
       SQUIRREL_EMBEDDED_MONITOR: "true"
