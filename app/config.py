@@ -24,7 +24,9 @@ class Settings(BaseSettings):
     epics_chunk_size: int = 1000  # Batch size for progress updates (smaller for better connection handling)
 
     # Redis configuration
-    redis_url: str = "redis://localhost:6379/0"
+    redis_username: str = ""
+    redis_password: str = "squirrel"
+    redis_url: str = f"redis://{redis_username}:{redis_password}@localhost:6379/0"
     redis_pv_cache_ttl: int = 60  # seconds
     redis_pv_hash_key: str = "squirrel:pv:values"
     redis_pv_metadata_key: str = "squirrel:pv:metadata"
