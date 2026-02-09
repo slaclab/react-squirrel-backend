@@ -1,5 +1,6 @@
 import os
 import json
+from uuid import UUID
 
 from fastapi import Query, Depends, APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,6 +86,10 @@ async def create_multiple_pvs(data: list[NewPVElementDTO], db: AsyncSession = De
 @router.put("/{pv_id}", response_model=dict)
 async def update_pv(pv_id: str, data: UpdatePVElementDTO, db: AsyncSession = Depends(get_db)):
     """Update a PV."""
+    try:
+        UUID(pv_id)
+    except ValueError:
+        raise APIException(404, f"PV {pv_id} not found", 404)
     service = PVService(db)
     pv = await service.update(pv_id, data)
     if not pv:
@@ -95,6 +100,10 @@ async def update_pv(pv_id: str, data: UpdatePVElementDTO, db: AsyncSession = Dep
 @router.delete("/{pv_id}", response_model=dict)
 async def delete_pv(pv_id: str, archive: bool = Query(False), db: AsyncSession = Depends(get_db)):
     """Delete a PV."""
+    try:
+        UUID(pv_id)
+    except ValueError:
+        raise APIException(404, f"PV {pv_id} not found", 404)
     service = PVService(db)
     success = await service.delete(pv_id)
     if not success:

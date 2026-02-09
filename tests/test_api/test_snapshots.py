@@ -21,7 +21,9 @@ class TestSnapshotCreate:
                 mock_epics.set_mock_value(pv["readbackAddress"], 99.5)
 
         response = await client.post(
-            "/v1/snapshots", json={"title": "Test Snapshot Creation", "description": "Testing snapshot functionality"}
+            "/v1/snapshots",
+            params={"async": "false", "use_cache": "false"},
+            json={"title": "Test Snapshot Creation", "description": "Testing snapshot functionality"},
         )
 
         assert response.status_code == 200
@@ -39,7 +41,11 @@ class TestSnapshotCreate:
         # Only set values for some PVs (others will return random/default)
         mock_epics.set_mock_value(sample_pvs[0]["setpointAddress"], 50.0)
 
-        response = await client.post("/v1/snapshots", json={"title": "Partial Connection Snapshot"})
+        response = await client.post(
+            "/v1/snapshots",
+            params={"async": "false", "use_cache": "false"},
+            json={"title": "Partial Connection Snapshot"},
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -153,13 +159,23 @@ class TestSnapshotCompare:
         for pv in sample_pvs:
             if pv.get("setpointAddress"):
                 mock_epics.set_mock_value(pv["setpointAddress"], 50.0)
+            if pv.get("readbackAddress"):
+                mock_epics.set_mock_value(pv["readbackAddress"], 49.5)
 
         # Create first snapshot
-        resp1 = await client.post("/v1/snapshots", json={"title": "Snapshot 1"})
+        resp1 = await client.post(
+            "/v1/snapshots",
+            params={"async": "false", "use_cache": "false"},
+            json={"title": "Snapshot 1"},
+        )
         snap1_id = resp1.json()["payload"]["id"]
 
         # Create second snapshot (same values)
-        resp2 = await client.post("/v1/snapshots", json={"title": "Snapshot 2"})
+        resp2 = await client.post(
+            "/v1/snapshots",
+            params={"async": "false", "use_cache": "false"},
+            json={"title": "Snapshot 2"},
+        )
         snap2_id = resp2.json()["payload"]["id"]
 
         # Compare
@@ -180,18 +196,30 @@ class TestSnapshotCompare:
         for pv in sample_pvs:
             if pv.get("setpointAddress"):
                 mock_epics.set_mock_value(pv["setpointAddress"], 50.0)
+            if pv.get("readbackAddress"):
+                mock_epics.set_mock_value(pv["readbackAddress"], 49.5)
 
         # Create first snapshot
-        resp1 = await client.post("/v1/snapshots", json={"title": "Before Change"})
+        resp1 = await client.post(
+            "/v1/snapshots",
+            params={"async": "false", "use_cache": "false"},
+            json={"title": "Before Change"},
+        )
         snap1_id = resp1.json()["payload"]["id"]
 
         # Change values significantly (beyond default tolerance)
         for pv in sample_pvs:
             if pv.get("setpointAddress"):
                 mock_epics.set_mock_value(pv["setpointAddress"], 100.0)
+            if pv.get("readbackAddress"):
+                mock_epics.set_mock_value(pv["readbackAddress"], 99.5)
 
         # Create second snapshot
-        resp2 = await client.post("/v1/snapshots", json={"title": "After Change"})
+        resp2 = await client.post(
+            "/v1/snapshots",
+            params={"async": "false", "use_cache": "false"},
+            json={"title": "After Change"},
+        )
         snap2_id = resp2.json()["payload"]["id"]
 
         # Compare

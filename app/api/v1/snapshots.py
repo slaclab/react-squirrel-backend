@@ -1,4 +1,5 @@
 import logging
+from uuid import UUID
 
 from arq import create_pool
 from fastapi import Query, Depends, APIRouter, BackgroundTasks
@@ -12,7 +13,7 @@ from app.schemas.job import JobCreatedDTO
 from app.api.responses import APIException, success_response
 from app.schemas.snapshot import NewSnapshotDTO, RestoreRequestDTO, UpdateSnapshotDTO
 from app.services.job_service import JobService
-from app.services.epics_service import get_epics_service
+from app.services.epics_service import EpicsService, get_epics_service
 from app.services.redis_service import get_redis_service
 from app.services.background_tasks import run_snapshot_creation
 from app.services.snapshot_service import SnapshotService
@@ -45,9 +46,9 @@ async def list_snapshots(
     tags: list[str]
     | None = Query(None, description="Filter by tag IDs (returns snapshots containing PVs with any of these tags)"),
     db: AsyncSession = Depends(get_db),
+    epics: EpicsService = Depends(get_epics_service),
 ):
     """List all snapshots, optionally filtered by title and/or tags."""
-    epics = get_epics_service()
     service = SnapshotService(db, epics)
     snapshots = await service.list_snapshots(title=title, tag_ids=tags)
     return success_response(snapshots)
@@ -59,6 +60,7 @@ async def get_snapshot(
     limit: int | None = Query(None, description="Limit number of PV values returned"),
     offset: int = Query(0, description="Offset for pagination"),
     db: AsyncSession = Depends(get_db),
+    epics: EpicsService = Depends(get_epics_service),
 ):
     """
     Get snapshot by ID with values.
@@ -66,7 +68,10 @@ async def get_snapshot(
     Use limit/offset for pagination when dealing with large snapshots.
     If limit is not specified, all values are returned.
     """
-    epics = get_epics_service()
+    try:
+        UUID(snapshot_id)
+    except ValueError:
+        raise APIException(404, f"Snapshot {snapshot_id} not found", 404)
     service = SnapshotService(db, epics)
     snapshot = await service.get_by_id(snapshot_id, limit=limit, offset=offset)
     if not snapshot:
@@ -82,6 +87,7 @@ async def create_snapshot(
     async_mode: bool = Query(True, alias="async", description="Run snapshot creation in background"),
     use_cache: bool = Query(True, description="Read from Redis cache (instant) vs direct EPICS read"),
     use_arq: bool = Query(True, description="Use Arq persistent queue (recommended) vs FastAPI BackgroundTasks"),
+    epics: EpicsService = Depends(get_epics_service),
 ):
     """
     Create a new snapshot by reading all PVs.
@@ -145,7 +151,6 @@ async def create_snapshot(
         )
     else:
         # Synchronous mode (legacy behavior)
-        epics = get_epics_service()
         redis = get_redis_service()
         service = SnapshotService(db, epics, redis)
 
@@ -181,14 +186,20 @@ async def update_snapshot(
 
 @router.post("/{snapshot_id}/restore", response_model=dict)
 async def restore_snapshot(
-    snapshot_id: str, request: RestoreRequestDTO | None = None, db: AsyncSession = Depends(get_db)
+    snapshot_id: str,
+    request: RestoreRequestDTO | None = None,
+    db: AsyncSession = Depends(get_db),
+    epics: EpicsService = Depends(get_epics_service),
 ):
     """
     Restore PV values from a snapshot to EPICS.
 
     Optionally specify pvIds to restore only specific PVs.
     """
-    epics = get_epics_service()
+    try:
+        UUID(snapshot_id)
+    except ValueError:
+        raise APIException(404, f"Snapshot {snapshot_id} not found", 404)
     service = SnapshotService(db, epics)
 
     # Verify snapshot exists
@@ -201,9 +212,17 @@ async def restore_snapshot(
 
 
 @router.delete("/{snapshot_id}", response_model=dict)
-async def delete_snapshot(snapshot_id: str, deleteData: bool = Query(True), db: AsyncSession = Depends(get_db)):
+async def delete_snapshot(
+    snapshot_id: str,
+    deleteData: bool = Query(True),
+    db: AsyncSession = Depends(get_db),
+    epics: EpicsService = Depends(get_epics_service),
+):
     """Delete a snapshot."""
-    epics = get_epics_service()
+    try:
+        UUID(snapshot_id)
+    except ValueError:
+        raise APIException(404, f"Snapshot {snapshot_id} not found", 404)
     service = SnapshotService(db, epics)
     success = await service.delete_snapshot(snapshot_id)
     if not success:
@@ -212,9 +231,18 @@ async def delete_snapshot(snapshot_id: str, deleteData: bool = Query(True), db: 
 
 
 @router.get("/{snapshot1_id}/compare/{snapshot2_id}", response_model=dict)
-async def compare_snapshots(snapshot1_id: str, snapshot2_id: str, db: AsyncSession = Depends(get_db)):
+async def compare_snapshots(
+    snapshot1_id: str,
+    snapshot2_id: str,
+    db: AsyncSession = Depends(get_db),
+    epics: EpicsService = Depends(get_epics_service),
+):
     """Compare two snapshots and return differences."""
-    epics = get_epics_service()
+    try:
+        UUID(snapshot1_id)
+        UUID(snapshot2_id)
+    except ValueError:
+        raise APIException(404, "Snapshot not found", 404)
     service = SnapshotService(db, epics)
     try:
         result = await service.compare_snapshots(snapshot1_id, snapshot2_id)

@@ -13,6 +13,7 @@ dependencies = [
     "asyncpg>=0.29.0",
     "alembic>=1.13.0",
     "aioca>=1.7",
+    "p4p>=4.1",
     "python-multipart>=0.0.6",
     "httpx>=0.26.0",
     "redis[hiredis]>=5.0.0",

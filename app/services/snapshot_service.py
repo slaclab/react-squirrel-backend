@@ -62,7 +62,8 @@ from app.schemas.snapshot import (
     SnapshotSummaryDTO,
     ComparisonResultDTO,
 )
-from app.services.epics_service import EpicsValue, EpicsService
+from app.services.epics_types import EpicsValue
+from app.services.epics_service import EpicsService
 from app.services.redis_service import RedisService
 from app.repositories.pv_repository import PVRepository
 from app.repositories.snapshot_repository import (
@@ -607,21 +608,37 @@ class SnapshotService:
             setpoint2 = _parse_jsonb(val2.setpoint_value) if val2 else None
             v1 = setpoint1.get("value") if setpoint1 else None
             v2 = setpoint2.get("value") if setpoint2 else None
+            readback1 = _parse_jsonb(val1.readback_value) if val1 else None
+            readback2 = _parse_jsonb(val2.readback_value) if val2 else None
+            r1 = readback1.get("value") if readback1 else None
+            r2 = readback2.get("value") if readback2 else None
 
-            # Check if within tolerance
-            within_tolerance = self._values_within_tolerance(
-                v1, v2, pv.abs_tolerance if pv else 0, pv.rel_tolerance if pv else 0
-            )
+            abs_tol = pv.abs_tolerance if pv else 0
+            rel_tol = pv.rel_tolerance if pv else 0
 
-            if within_tolerance:
+            has_setpoint = v1 is not None or v2 is not None
+            has_readback = r1 is not None or r2 is not None
+
+            setpoint_within = True
+            readback_within = True
+
+            if has_setpoint:
+                setpoint_within = self._values_within_tolerance(v1, v2, abs_tol, rel_tol)
+            if has_readback:
+                readback_within = self._values_within_tolerance(r1, r2, abs_tol, rel_tol)
+
+            if setpoint_within and readback_within:
                 match_count += 1
             else:
+                # Prefer showing setpoint values if present, otherwise readback
+                out_v1 = v1 if has_setpoint else r1
+                out_v2 = v2 if has_setpoint else r2
                 differences.append(
                     {
                         "pvId": pv_id,
                         "pvName": val1.pv_name if val1 else (val2.pv_name if val2 else ""),
-                        "value1": v1,
-                        "value2": v2,
+                        "value1": out_v1,
+                        "value2": out_v2,
                         "withinTolerance": False,
                     }
                 )

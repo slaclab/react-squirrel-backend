@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     epics_ca_timeout: float = 10.0  # Read timeout (includes connection time for batch reads)
     epics_chunk_size: int = 1000  # Batch size for progress updates (smaller for better connection handling)
 
+    # EPICS PVAccess configuration (p4p)
+    epics_pva_addr_list: str = ""
+    epics_pva_auto_addr_list: str = "YES"
+    epics_pva_server_port: str = ""
+    epics_pva_broadcast_port: str = ""
+    epics_pva_timeout: float = 10.0  # Read timeout for PVAccess
+
     # Redis configuration
     redis_username: str = ""
     redis_password: str = "squirrel"

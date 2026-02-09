@@ -18,8 +18,10 @@ from app.config import get_settings
 from app.db.session import async_session_maker
 from app.services.watchdog import get_watchdog
 from app.services.pv_monitor import get_pv_monitor
+from app.services.pv_protocol import parse_pv_name
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
+from app.services.pvaccess_monitor import get_pvaccess_monitor
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -91,6 +93,7 @@ async def main():
 
     # Initialize PV Monitor with Redis
     pv_monitor = get_pv_monitor(redis_service)
+    pva_monitor = None
 
     # Load PV addresses from database
     try:
@@ -117,14 +120,30 @@ async def main():
 
     # Start PV monitoring (with batched startup)
     # Always start the monitor (for heartbeat) even if no PVs
+    ca_pvs: list[str] = []
+    pva_pvs: list[str] = []
+    for pv_name in pv_addresses:
+        protocol, _ = parse_pv_name(pv_name)
+        if protocol == "pva":
+            pva_pvs.append(pv_name)
+        else:
+            ca_pvs.append(pv_name)
+
     if pv_addresses:
         logger.info(
-            f"Starting PV Monitor for {len(pv_addresses)} unique addresses "
+            f"Starting PV Monitor for {len(ca_pvs)} CA addresses and {len(pva_pvs)} PVA addresses "
             f"(batch size: {settings.pv_monitor_batch_size}, "
             f"batch delay: {settings.pv_monitor_batch_delay_ms}ms)"
         )
-        await pv_monitor.start(list(pv_addresses))
-        logger.info(f"PV Monitor started for {len(pv_addresses)} unique addresses")
+        await pv_monitor.start(ca_pvs)
+        logger.info(f"PV Monitor started for {len(ca_pvs)} CA addresses")
+
+        if pva_pvs:
+            pva_monitor = get_pvaccess_monitor(redis_service)
+            await pva_monitor.start(pva_pvs)
+            logger.info(f"PVAccess Monitor started for {len(pva_pvs)} PVA addresses")
+        else:
+            logger.info("No PVA addresses found; PVAccess Monitor not started")
     else:
         logger.warning("No PV addresses found in database - starting PV Monitor in idle mode for heartbeat")
         await pv_monitor.start([])  # Start with empty list to initialize heartbeat
@@ -132,7 +151,7 @@ async def main():
     # Start Watchdog if enabled
     watchdog = None
     if settings.watchdog_enabled:
-        watchdog = get_watchdog(redis_service, epics, pv_monitor)
+        watchdog = get_watchdog(redis_service, epics, pv_monitor, pva_monitor if pva_pvs else None)
         await watchdog.start()
         logger.info(
             f"Watchdog started (check interval: {settings.watchdog_check_interval}s, "
@@ -175,6 +194,11 @@ async def main():
     if pv_monitor.is_running():
         await pv_monitor.stop()
         logger.info("PV Monitor stopped")
+
+    # Stop PVAccess Monitor
+    if pva_monitor and pva_monitor.is_running():
+        await pva_monitor.stop()
+        logger.info("PVAccess Monitor stopped")
 
     # Release monitor lock
     await redis_service.release_monitor_lock(INSTANCE_ID)

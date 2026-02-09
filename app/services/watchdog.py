@@ -16,11 +16,13 @@ from datetime import datetime
 from dataclasses import field, dataclass
 
 from app.config import get_settings
+from app.services.pv_protocol import parse_pv_name
 from app.services.epics_service import EpicsService
 from app.services.redis_service import RedisService
 
 if TYPE_CHECKING:
     from app.services.pv_monitor import PVMonitor
+    from app.services.pvaccess_monitor import PVAccessMonitor
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -72,10 +74,12 @@ class PVWatchdog:
         redis_service: RedisService,
         epics_service: EpicsService,
         pv_monitor: "PVMonitor",
+        pva_monitor: "PVAccessMonitor | None" = None,
     ):
         self._redis = redis_service
         self._epics = epics_service
         self._pv_monitor = pv_monitor
+        self._pva_monitor = pva_monitor
 
         # Configuration from settings
         self._check_interval = settings.watchdog_check_interval
@@ -191,7 +195,14 @@ class PVWatchdog:
                     )
 
                     # Restart the monitor for this PV
-                    await self._pv_monitor.restart_monitor(pv_name)
+                    protocol, _ = parse_pv_name(pv_name)
+                    if protocol == "pva":
+                        if self._pva_monitor:
+                            await self._pva_monitor.restart_monitor(pv_name)
+                        else:
+                            logger.warning(f"No PVA monitor available to restart {pv_name}")
+                    else:
+                        await self._pv_monitor.restart_monitor(pv_name)
 
                     reconnected += 1
                     self._stats.successful_reconnects += 1
@@ -298,6 +309,7 @@ def get_watchdog(
     redis_service: RedisService | None = None,
     epics_service: EpicsService | None = None,
     pv_monitor: "PVMonitor | None" = None,
+    pva_monitor: "PVAccessMonitor | None" = None,
 ) -> PVWatchdog:
     """Get or create the Watchdog singleton."""
     global _watchdog
@@ -314,5 +326,5 @@ def get_watchdog(
             from app.services.pv_monitor import get_pv_monitor
 
             pv_monitor = get_pv_monitor()
-        _watchdog = PVWatchdog(redis_service, epics_service, pv_monitor)
+        _watchdog = PVWatchdog(redis_service, epics_service, pv_monitor, pva_monitor)
     return _watchdog
