@@ -8,7 +8,7 @@ from datetime import datetime
 from p4p.client.asyncio import Context
 
 from app.config import get_settings
-from app.services.pv_protocol import parse_pv_name
+from app.services.pv_protocol import is_ca, parse_pv_name
 from app.services.redis_service import PVCacheEntry, RedisService
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,8 @@ class PVAccessMonitor:
         """Start monitoring a single PVAccess PV."""
         try:
             protocol, stripped_name = parse_pv_name(pv_name)
-            if protocol != "pva":
+            # Explicit ca:// addresses should not be monitored via PVA.
+            if protocol == "ca" and is_ca(pv_name):
                 return False
 
             def on_value_change(value):

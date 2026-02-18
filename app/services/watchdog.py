@@ -16,7 +16,7 @@ from datetime import datetime
 from dataclasses import field, dataclass
 
 from app.config import get_settings
-from app.services.pv_protocol import parse_pv_name
+from app.services.pv_protocol import is_unprefixed, parse_pv_name
 from app.services.epics_service import EpicsService
 from app.services.redis_service import RedisService
 
@@ -203,6 +203,8 @@ class PVWatchdog:
                             logger.warning(f"No PVA monitor available to restart {pv_name}")
                     else:
                         await self._pv_monitor.restart_monitor(pv_name)
+                        if settings.epics_unprefixed_pva_fallback and is_unprefixed(pv_name) and self._pva_monitor:
+                            await self._pva_monitor.restart_monitor(pv_name)
 
                     reconnected += 1
                     self._stats.successful_reconnects += 1

@@ -24,7 +24,7 @@ from app.config import get_settings
 from app.api.responses import APIException
 from app.api.v1.router import router as v1_router
 from app.api.v1.websocket import get_diff_manager
-from app.services.pv_protocol import parse_pv_name
+from app.services.pv_protocol import is_unprefixed, parse_pv_name
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
 from app.services.pvaccess_monitor import get_pvaccess_monitor
@@ -168,6 +168,8 @@ async def _start_embedded_monitor(redis_service, epics):
             pva_pvs.append(pv_name)
         else:
             ca_pvs.append(pv_name)
+            if settings.epics_unprefixed_pva_fallback and is_unprefixed(pv_name):
+                pva_pvs.append(pv_name)
 
     if pv_addresses:
         logger.info(f"[EMBEDDED] Starting PV Monitor for {len(ca_pvs)} CA and {len(pva_pvs)} PVA addresses")

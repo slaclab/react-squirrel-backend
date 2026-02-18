@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     epics_pva_server_port: str = ""
     epics_pva_broadcast_port: str = ""
     epics_pva_timeout: float = 10.0  # Read timeout for PVAccess
+    epics_unprefixed_pva_fallback: bool = False  # If True, unprefixed PVs try CA then PVA on failure
 
     # Redis configuration
     redis_username: str = ""

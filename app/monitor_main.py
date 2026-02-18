@@ -18,7 +18,7 @@ from app.config import get_settings
 from app.db.session import async_session_maker
 from app.services.watchdog import get_watchdog
 from app.services.pv_monitor import get_pv_monitor
-from app.services.pv_protocol import parse_pv_name
+from app.services.pv_protocol import is_unprefixed, parse_pv_name
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
 from app.services.pvaccess_monitor import get_pvaccess_monitor
@@ -128,6 +128,8 @@ async def main():
             pva_pvs.append(pv_name)
         else:
             ca_pvs.append(pv_name)
+            if settings.epics_unprefixed_pva_fallback and is_unprefixed(pv_name):
+                pva_pvs.append(pv_name)
 
     if pv_addresses:
         logger.info(

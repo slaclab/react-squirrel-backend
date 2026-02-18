@@ -6,6 +6,7 @@ from typing import Any
 from aioca import CANothing, camonitor
 
 from app.config import get_settings
+from app.services.pv_protocol import is_pva, parse_pv_name
 from app.services.redis_service import PVCacheEntry, RedisService
 
 logger = logging.getLogger(__name__)
@@ -102,6 +103,11 @@ class PVMonitor:
         Returns True if monitor started successfully, False otherwise.
         """
         try:
+            protocol, stripped_name = parse_pv_name(pv_name)
+            # Explicit pva:// addresses should not be monitored via CA.
+            if protocol == "pva" and is_pva(pv_name):
+                return False
+
             # Create a callback closure for this PV
             def on_value_change(value, **kwargs):
                 # Queue the update for batch processing
@@ -110,7 +116,7 @@ class PVMonitor:
             # Start the monitor - camonitor returns a Subscription object
             # notify_disconnect=True is CRITICAL for connection tracking
             subscription = camonitor(
-                pv_name,
+                stripped_name,
                 on_value_change,
                 notify_disconnect=True,  # Get notified on disconnect
                 format=2,  # FORMAT_TIME for timestamp
