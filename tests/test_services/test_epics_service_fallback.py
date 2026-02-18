@@ -1,8 +1,8 @@
 import pytest
 
+import app.services.epics_service as epics_module
 from app.services.epics_types import EpicsValue
 from app.services.epics_service import EpicsService
-import app.services.epics_service as epics_module
 
 
 class _DummyCaResult:

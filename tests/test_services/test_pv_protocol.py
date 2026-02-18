@@ -1,7 +1,7 @@
 from app.services.pv_protocol import (
-    has_protocol_prefix,
     is_unprefixed,
     parse_pv_name,
+    has_protocol_prefix,
     strip_protocol_prefix,
 )
 
