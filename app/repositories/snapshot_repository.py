@@ -64,9 +64,7 @@ class SnapshotRepository(BaseRepository[Snapshot]):
             title: Optional new title
             description: Optional new description
         """
-        result = await self.session.execute(
-            select(Snapshot).where(Snapshot.id == snapshot_id)
-        )
+        result = await self.session.execute(select(Snapshot).where(Snapshot.id == snapshot_id))
         snapshot = result.scalar_one_or_none()
 
         if not snapshot:

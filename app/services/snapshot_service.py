@@ -179,7 +179,7 @@ class SnapshotService:
             pvCount=total_count,
             pvValues=pv_values,
         )
-        
+
     async def update_snapshot_metadata(
         self,
         snapshot_id: str,

@@ -13,7 +13,9 @@ from app.repositories.job_repository import JobRepository
 logger = logging.getLogger(__name__)
 
 
-async def run_snapshot_creation(job_id: str, title: str, description: str | None = None, use_cache: bool = True) -> None:
+async def run_snapshot_creation(
+    job_id: str, title: str, description: str | None = None, use_cache: bool = True
+) -> None:
     """
     Background task to create a snapshot.
 

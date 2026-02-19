@@ -10,7 +10,7 @@ from app.db.session import get_db
 from app.models.job import JobType
 from app.schemas.job import JobCreatedDTO
 from app.api.responses import APIException, success_response
-from app.schemas.snapshot import NewSnapshotDTO, UpdateSnapshotDTO, RestoreRequestDTO
+from app.schemas.snapshot import NewSnapshotDTO, RestoreRequestDTO, UpdateSnapshotDTO
 from app.services.job_service import JobService
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
@@ -101,7 +101,8 @@ async def create_snapshot(
         # Create a job record
         job_service = JobService(db)
         job = await job_service.create_job(
-            JobType.SNAPSHOT_CREATE, job_data={"title": data.title, "description": data.description, "use_cache": use_cache}
+            JobType.SNAPSHOT_CREATE,
+            job_data={"title": data.title, "description": data.description, "use_cache": use_cache},
         )
 
         # CRITICAL: Commit the job to database before returning
@@ -154,6 +155,7 @@ async def create_snapshot(
             snapshot = await service.create_snapshot(data)
 
         return success_response(snapshot)
+
 
 @router.put("/{snapshot_id}", response_model=dict)
 async def update_snapshot(
