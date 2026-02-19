@@ -44,7 +44,7 @@ class PVValueDTO(BaseModel):
 
 class SnapshotBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
-    comment: str | None = None
+    description: str | None = None
 
 
 class NewSnapshotDTO(SnapshotBase):
@@ -69,6 +69,13 @@ class SnapshotDTO(SnapshotSummaryDTO):
     """Full snapshot with all values."""
 
     pvValues: list[PVValueDTO] = []
+
+
+class UpdateSnapshotDTO(BaseModel):
+    """DTO for updating snapshot metadata."""
+
+    title: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = None
 
 
 class RestoreRequestDTO(BaseModel):

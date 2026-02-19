@@ -10,7 +10,7 @@ from app.db.session import get_db
 from app.models.job import JobType
 from app.schemas.job import JobCreatedDTO
 from app.api.responses import APIException, success_response
-from app.schemas.snapshot import NewSnapshotDTO, RestoreRequestDTO
+from app.schemas.snapshot import NewSnapshotDTO, RestoreRequestDTO, UpdateSnapshotDTO
 from app.services.job_service import JobService
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
@@ -101,7 +101,8 @@ async def create_snapshot(
         # Create a job record
         job_service = JobService(db)
         job = await job_service.create_job(
-            JobType.SNAPSHOT_CREATE, job_data={"title": data.title, "comment": data.comment, "use_cache": use_cache}
+            JobType.SNAPSHOT_CREATE,
+            job_data={"title": data.title, "description": data.description, "use_cache": use_cache},
         )
 
         # CRITICAL: Commit the job to database before returning
@@ -117,7 +118,7 @@ async def create_snapshot(
                         "create_snapshot_task",
                         job_id=str(job.id),
                         title=data.title,
-                        comment=data.comment,
+                        description=data.description,
                         use_cache=use_cache,
                     )
                     logger.info(f"Enqueued snapshot job to Arq: {job.id}")
@@ -132,7 +133,7 @@ async def create_snapshot(
                     logger.warning(f"Failed to enqueue to Arq, falling back to BackgroundTasks: {e}")
 
         # Fallback to FastAPI BackgroundTasks
-        background_tasks.add_task(run_snapshot_creation, job.id, data.title, data.comment, use_cache)
+        background_tasks.add_task(run_snapshot_creation, job.id, data.title, data.description, use_cache)
         logger.info(f"Scheduled snapshot job via BackgroundTasks: {job.id}")
 
         return success_response(
@@ -154,6 +155,28 @@ async def create_snapshot(
             snapshot = await service.create_snapshot(data)
 
         return success_response(snapshot)
+
+
+@router.put("/{snapshot_id}", response_model=dict)
+async def update_snapshot(
+    snapshot_id: str,
+    data: UpdateSnapshotDTO,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update snapshot title and/or description."""
+    epics = get_epics_service()
+    service = SnapshotService(db, epics)
+
+    snapshot = await service.update_snapshot_metadata(
+        snapshot_id,
+        title=data.title,
+        description=data.description,
+    )
+
+    if not snapshot:
+        raise APIException(404, f"Snapshot {snapshot_id} not found", 404)
+
+    return success_response(snapshot)
 
 
 @router.post("/{snapshot_id}/restore", response_model=dict)

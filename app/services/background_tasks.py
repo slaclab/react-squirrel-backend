@@ -13,7 +13,9 @@ from app.repositories.job_repository import JobRepository
 logger = logging.getLogger(__name__)
 
 
-async def run_snapshot_creation(job_id: str, title: str, comment: str | None = None, use_cache: bool = True) -> None:
+async def run_snapshot_creation(
+    job_id: str, title: str, description: str | None = None, use_cache: bool = True
+) -> None:
     """
     Background task to create a snapshot.
 
@@ -84,7 +86,7 @@ async def run_snapshot_creation(job_id: str, title: str, comment: str | None = N
                     logger.error(f"Error in progress_update: {e}")
 
             # Call create_snapshot with progress callback
-            data = NewSnapshotDTO(title=title, comment=comment)
+            data = NewSnapshotDTO(title=title, description=description)
             if use_cache:
                 result = await snapshot_service.create_snapshot_from_cache(data, progress_callback=progress_update)
             else:
@@ -109,10 +111,10 @@ async def run_snapshot_creation(job_id: str, title: str, comment: str | None = N
                 logger.exception(f"Failed to update job status: {inner_e}")
 
 
-def schedule_snapshot_creation(job_id: str, title: str, comment: str | None = None, use_cache: bool = True) -> None:
+def schedule_snapshot_creation(job_id: str, title: str, description: str | None = None, use_cache: bool = True) -> None:
     """
     Schedule a snapshot creation task to run in the background.
 
     This creates a new asyncio task that will run independently.
     """
-    asyncio.create_task(run_snapshot_creation(job_id, title, comment, use_cache))
+    asyncio.create_task(run_snapshot_creation(job_id, title, description, use_cache))

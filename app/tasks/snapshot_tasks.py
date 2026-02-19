@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 async def create_snapshot_task(
-    ctx: dict, job_id: str, title: str, comment: str | None = None, use_cache: bool = True
+    ctx: dict, job_id: str, title: str, description: str | None = None, use_cache: bool = True
 ) -> str:
     """
     Create a snapshot - runs in Arq worker process.
@@ -32,7 +32,7 @@ async def create_snapshot_task(
         ctx: Arq context (contains epics, redis services from worker startup)
         job_id: Job ID for progress tracking
         title: Snapshot title
-        comment: Optional snapshot comment
+        description: Optional snapshot description
         use_cache: Whether to read from Redis cache or direct EPICS
 
     Returns:
@@ -67,7 +67,7 @@ async def create_snapshot_task(
             snapshot_service = SnapshotService(session, epics, redis)
 
             # Create the snapshot
-            data = NewSnapshotDTO(title=title, comment=comment)
+            data = NewSnapshotDTO(title=title, description=description)
 
             if use_cache:
                 result = await snapshot_service.create_snapshot_from_cache(data, progress_callback=on_progress)
