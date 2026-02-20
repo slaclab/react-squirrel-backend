@@ -225,7 +225,8 @@ class SnapshotService:
         try:
             # Get all PVs and their addresses
             pv_addresses = await self.pv_repo.get_all_addresses()
-            logger.info(f"Found {len(pv_addresses)} PVs to snapshot")
+            total_pv_count = len(pv_addresses)
+            logger.info(f"Found {total_pv_count} PVs to snapshot")
 
             # Collect all unique addresses to read
             setpoint_map: dict[str, str] = {}  # address -> pv_id
@@ -238,11 +239,18 @@ class SnapshotService:
                     readback_map[readback] = pv_id
 
             all_addresses = list(set(setpoint_map.keys()) | set(readback_map.keys()))
-            logger.info(f"Reading {len(all_addresses)} unique EPICS addresses")
+            logger.info(f"Reading {len(all_addresses)} unique EPICS addresses for {total_pv_count} PVs")
+
+            # Create a wrapper progress callback that converts address progress to PV progress, so that users see
+            # about how many PVs are processed rather than total readbacks/setpoints
+            async def pv_progress_callback(current_addr: int, total_addr: int, message: str):
+                pv_progress_count = int((current_addr / total_addr) * total_pv_count) if total_addr > 0 else 0
+                pv_message = f"Read {pv_progress_count:,}/{total_pv_count:,} PVs"
+                await progress_callback(pv_progress_count, total_pv_count, pv_message)
 
             # Read all values from EPICS in parallel with progress reporting
             if progress_callback:
-                epics_values = await self.epics.get_many_with_progress(all_addresses, progress_callback)
+                epics_values = await self.epics.get_many_with_progress(all_addresses, pv_progress_callback)
             else:
                 epics_values = await self.epics.get_many(all_addresses)
 
@@ -261,7 +269,7 @@ class SnapshotService:
 
             # Report progress: EPICS read complete, starting database save
             if progress_callback:
-                await progress_callback(len(all_addresses), len(all_addresses), "Processing results...")
+                await progress_callback(total_pv_count, total_pv_count, "Processing results...")
 
             # Create snapshot record
             snapshot = Snapshot(title=data.title, description=data.description, created_by=created_by)
@@ -330,7 +338,7 @@ class SnapshotService:
             # Report progress: Saving to database
             if progress_callback:
                 await progress_callback(
-                    len(all_addresses), len(all_addresses), f"Saving {len(snapshot_values)} values to database..."
+                    total_pv_count, total_pv_count, f"Saving {len(snapshot_values):,} PV values to database..."
                 )
 
             # Bulk insert values with progress tracking for large datasets
@@ -373,10 +381,11 @@ class SnapshotService:
         try:
             # Get all PVs and their addresses
             pv_addresses = await self.pv_repo.get_all_addresses()
-            logger.info(f"Found {len(pv_addresses)} PVs to snapshot")
+            total_pv_count = len(pv_addresses)
+            logger.info(f"Found {total_pv_count} PVs to snapshot")
 
             if progress_callback:
-                await progress_callback(0, len(pv_addresses), "Reading from cache...")
+                await progress_callback(0, total_pv_count, "Reading from cache...")
 
             # Get all cached values from Redis as dicts (O(1) per value)
             cached_values = await self.redis.get_all_pv_values_as_dict()
@@ -490,7 +499,7 @@ class SnapshotService:
 
             if progress_callback:
                 await progress_callback(
-                    len(pv_addresses), len(pv_addresses), f"Saving {len(snapshot_values_data)} values to database..."
+                    total_pv_count, total_pv_count, f"Saving {len(snapshot_values_data):,} PV values to database..."
                 )
 
             # Use fast COPY insert
