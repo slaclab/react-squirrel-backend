@@ -24,8 +24,10 @@ from app.config import get_settings
 from app.api.responses import APIException
 from app.api.v1.router import router as v1_router
 from app.api.v1.websocket import get_diff_manager
+from app.services.pv_protocol import is_unprefixed, parse_pv_name
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
+from app.services.pvaccess_monitor import get_pvaccess_monitor
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -142,6 +144,7 @@ async def _start_embedded_monitor(redis_service, epics):
     from app.repositories.pv_repository import PVRepository
 
     pv_monitor = get_pv_monitor(redis_service)
+    pva_monitor = None
 
     # Get all PV addresses from database
     async with async_session_maker() as session:
@@ -157,16 +160,34 @@ async def _start_embedded_monitor(redis_service, epics):
                 pv_addresses.add(readback)
 
     # Start PV monitoring (with batched startup)
+    ca_pvs: list[str] = []
+    pva_pvs: list[str] = []
+    for pv_name in pv_addresses:
+        protocol, _ = parse_pv_name(pv_name)
+        if protocol == "pva":
+            pva_pvs.append(pv_name)
+        else:
+            ca_pvs.append(pv_name)
+            if settings.epics_unprefixed_pva_fallback and is_unprefixed(pv_name):
+                pva_pvs.append(pv_name)
+
     if pv_addresses:
-        logger.info(f"[EMBEDDED] Starting PV Monitor for {len(pv_addresses)} unique addresses")
-        await pv_monitor.start(list(pv_addresses))
-        logger.info(f"[EMBEDDED] PV Monitor started for {len(pv_addresses)} unique addresses")
+        logger.info(f"[EMBEDDED] Starting PV Monitor for {len(ca_pvs)} CA and {len(pva_pvs)} PVA addresses")
+        await pv_monitor.start(ca_pvs)
+        logger.info(f"[EMBEDDED] PV Monitor started for {len(ca_pvs)} CA addresses")
+
+        if pva_pvs:
+            pva_monitor = get_pvaccess_monitor(redis_service)
+            await pva_monitor.start(pva_pvs)
+            logger.info(f"[EMBEDDED] PVAccess Monitor started for {len(pva_pvs)} PVA addresses")
+        else:
+            logger.info("[EMBEDDED] No PVA addresses found; PVAccess Monitor not started")
     else:
         logger.warning("[EMBEDDED] No PV addresses found in database")
 
     # Start Watchdog if enabled
     if settings.watchdog_enabled:
-        watchdog = get_watchdog(redis_service, epics, pv_monitor)
+        watchdog = get_watchdog(redis_service, epics, pv_monitor, pva_monitor if pva_pvs else None)
         await watchdog.start()
         logger.info("[EMBEDDED] Watchdog started")
 
@@ -194,6 +215,15 @@ async def _stop_embedded_monitor():
             logger.info("[EMBEDDED] PV Monitor stopped")
     except Exception as e:
         logger.error(f"Error stopping PV Monitor: {e}")
+
+    # Stop PVAccess Monitor
+    try:
+        pva_monitor = get_pvaccess_monitor()
+        if pva_monitor.is_running():
+            await pva_monitor.stop()
+            logger.info("[EMBEDDED] PVAccess Monitor stopped")
+    except Exception as e:
+        logger.error(f"Error stopping PVAccess Monitor: {e}")
 
 
 app = FastAPI(

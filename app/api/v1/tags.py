@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import Query, Depends, APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +22,10 @@ async def get_all_tag_groups(db: AsyncSession = Depends(get_db)):
 @router.get("/{group_id}", response_model=dict)
 async def get_tag_group(group_id: str, db: AsyncSession = Depends(get_db)):
     """Get tag group by ID with all tags."""
+    try:
+        UUID(group_id)
+    except ValueError:
+        raise APIException(404, f"Tag group {group_id} not found", 404)
     service = TagService(db)
     group = await service.get_group_by_id(group_id)
     if not group:
@@ -42,6 +48,10 @@ async def create_tag_group(data: TagGroupCreate, db: AsyncSession = Depends(get_
 @router.put("/{group_id}", response_model=dict)
 async def update_tag_group(group_id: str, data: TagGroupUpdate, db: AsyncSession = Depends(get_db)):
     """Update a tag group."""
+    try:
+        UUID(group_id)
+    except ValueError:
+        raise APIException(404, f"Tag group {group_id} not found", 404)
     service = TagService(db)
     try:
         group = await service.update_group(group_id, data)
@@ -55,6 +65,10 @@ async def update_tag_group(group_id: str, data: TagGroupUpdate, db: AsyncSession
 @router.delete("/{group_id}", response_model=dict)
 async def delete_tag_group(group_id: str, force: bool = Query(False), db: AsyncSession = Depends(get_db)):
     """Delete a tag group."""
+    try:
+        UUID(group_id)
+    except ValueError:
+        raise APIException(404, f"Tag group {group_id} not found", 404)
     service = TagService(db)
     success = await service.delete_group(group_id, force=force)
     if not success:
@@ -65,6 +79,10 @@ async def delete_tag_group(group_id: str, force: bool = Query(False), db: AsyncS
 @router.post("/{group_id}/tags", response_model=dict)
 async def add_tag_to_group(group_id: str, data: TagCreate, db: AsyncSession = Depends(get_db)):
     """Add a tag to a group."""
+    try:
+        UUID(group_id)
+    except ValueError:
+        raise APIException(404, f"Tag group {group_id} not found", 404)
     service = TagService(db)
     try:
         group = await service.add_tag_to_group(group_id, data)
@@ -78,6 +96,11 @@ async def add_tag_to_group(group_id: str, data: TagCreate, db: AsyncSession = De
 @router.put("/{group_id}/tags/{tag_id}", response_model=dict)
 async def update_tag(group_id: str, tag_id: str, data: TagUpdate, db: AsyncSession = Depends(get_db)):
     """Update a tag in a group."""
+    try:
+        UUID(group_id)
+        UUID(tag_id)
+    except ValueError:
+        raise APIException(404, f"Tag {tag_id} not found in group {group_id}", 404)
     service = TagService(db)
     group = await service.update_tag(group_id, tag_id, data)
     if not group:
@@ -88,6 +111,11 @@ async def update_tag(group_id: str, tag_id: str, data: TagUpdate, db: AsyncSessi
 @router.delete("/{group_id}/tags/{tag_id}", response_model=dict)
 async def remove_tag(group_id: str, tag_id: str, db: AsyncSession = Depends(get_db)):
     """Remove a tag from a group."""
+    try:
+        UUID(group_id)
+        UUID(tag_id)
+    except ValueError:
+        raise APIException(404, f"Tag {tag_id} not found in group {group_id}", 404)
     service = TagService(db)
     group = await service.remove_tag(group_id, tag_id)
     if not group:

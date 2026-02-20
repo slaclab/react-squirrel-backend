@@ -3,12 +3,14 @@ import math
 import logging
 from typing import Any
 from datetime import datetime
-from dataclasses import dataclass
 from collections.abc import Callable
 
 from aioca import FORMAT_TIME, caget, caput, connect, purge_channel_caches
 
 from app.config import get_settings
+from app.services.epics_types import EpicsValue
+from app.services.pv_protocol import is_unprefixed, parse_pv_name
+from app.services.pvaccess_service import get_pvaccess_service
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -18,22 +20,6 @@ settings = get_settings()
 if settings.epics_ca_addr_list:
     os.environ["EPICS_CA_ADDR_LIST"] = settings.epics_ca_addr_list
 os.environ["EPICS_CA_AUTO_ADDR_LIST"] = settings.epics_ca_auto_addr_list
-
-
-@dataclass
-class EpicsValue:
-    """Container for EPICS PV value with metadata."""
-
-    value: Any
-    status: int | None = None
-    severity: int | None = None
-    timestamp: datetime | None = None
-    units: str | None = None
-    precision: int | None = None
-    upper_ctrl_limit: float | None = None
-    lower_ctrl_limit: float | None = None
-    connected: bool = True
-    error: str | None = None
 
 
 class EpicsService:
@@ -52,8 +38,10 @@ class EpicsService:
         self._timeout = settings.epics_ca_timeout
         self._conn_timeout = settings.epics_ca_conn_timeout
         self._chunk_size = settings.epics_chunk_size
+        self._unprefixed_pva_fallback = settings.epics_unprefixed_pva_fallback
         self._enable_circuit_breaker = enable_circuit_breaker
         self._circuit_manager = None
+        self._pva_service = None
 
         # Lazily initialize circuit breaker to avoid import issues
         if self._enable_circuit_breaker:
@@ -63,6 +51,40 @@ class EpicsService:
                 self._circuit_manager = get_circuit_breaker_manager()
             except ImportError:
                 logger.warning("Circuit breaker not available")
+
+    def _get_pva_service(self):
+        if self._pva_service is None:
+            self._pva_service = get_pvaccess_service()
+        return self._pva_service
+
+    async def _get_single_pva(self, stripped: str, timeout: float | None = None) -> EpicsValue:
+        pva = self._get_pva_service()
+        return await pva.get_single(stripped, timeout=timeout)
+
+    async def _get_single_ca(self, pv_name: str, stripped: str, timeout: float | None = None) -> EpicsValue:
+        ioc_name = self._extract_ioc_name(stripped)
+        effective_timeout = timeout if timeout is not None else self._timeout
+
+        if self._circuit_manager and self._circuit_manager.is_open(ioc_name):
+            logger.debug(f"Circuit open for {ioc_name}, skipping {pv_name}")
+            return EpicsValue(value=None, connected=False, error=f"Circuit breaker open for {ioc_name}")
+
+        try:
+            result = await caget(stripped, format=FORMAT_TIME, timeout=effective_timeout, throw=False)
+            epics_value = self._augmented_to_epics_value(pv_name, result)
+
+            if self._circuit_manager:
+                if epics_value.connected:
+                    self._circuit_manager._record_success(ioc_name)
+                else:
+                    self._circuit_manager._record_failure(ioc_name, Exception(epics_value.error or "Connection failed"))
+
+            return epics_value
+        except Exception as e:
+            logger.error(f"Error getting {pv_name}: {e}")
+            if self._circuit_manager:
+                self._circuit_manager._record_failure(ioc_name, e)
+            return EpicsValue(value=None, connected=False, error=str(e))
 
     def _extract_ioc_name(self, pv_name: str) -> str:
         """
@@ -128,43 +150,44 @@ class EpicsService:
 
     async def connect_pv(self, pv_name: str) -> bool:
         """Pre-connect to a PV."""
-        result = await connect(pv_name, timeout=self._conn_timeout, throw=False)
-        return result.ok
+        protocol, stripped = parse_pv_name(pv_name)
+        if protocol == "pva":
+            return True
+        result = await connect(stripped, timeout=self._conn_timeout, throw=False)
+        if result.ok:
+            return True
+
+        if self._unprefixed_pva_fallback and is_unprefixed(pv_name):
+            pva_result = await self._get_single_pva(stripped, timeout=self._conn_timeout)
+            return pva_result.connected
+        return False
 
     async def connect_many(self, pv_names: list[str]) -> None:
         """Pre-connect to multiple PVs."""
-        await connect(pv_names, timeout=self._conn_timeout, throw=False)
-        logger.info(f"Pre-connected to {len(pv_names)} PVs")
+        ca_pvs = []
+        for pv_name in pv_names:
+            protocol, stripped = parse_pv_name(pv_name)
+            if protocol == "ca":
+                ca_pvs.append(stripped)
+        if ca_pvs:
+            await connect(ca_pvs, timeout=self._conn_timeout, throw=False)
+            logger.info(f"Pre-connected to {len(ca_pvs)} CA PVs")
 
-    async def get_single(self, pv_name: str) -> EpicsValue:
+    async def get_single(self, pv_name: str, timeout: float | None = None) -> EpicsValue:
         """Read a single PV with metadata."""
-        ioc_name = self._extract_ioc_name(pv_name)
+        protocol, stripped = parse_pv_name(pv_name)
+        if protocol == "pva":
+            return await self._get_single_pva(stripped, timeout=timeout)
 
-        # Check circuit breaker first
-        if self._circuit_manager and self._circuit_manager.is_open(ioc_name):
-            logger.debug(f"Circuit open for {ioc_name}, skipping {pv_name}")
-            return EpicsValue(value=None, connected=False, error=f"Circuit breaker open for {ioc_name}")
+        ca_result = await self._get_single_ca(pv_name, stripped, timeout=timeout)
+        if ca_result.connected:
+            return ca_result
 
-        try:
-            result = await caget(pv_name, format=FORMAT_TIME, timeout=self._timeout, throw=False)
-            epics_value = self._augmented_to_epics_value(pv_name, result)
-
-            # Record success/failure with circuit breaker
-            if self._circuit_manager:
-                if epics_value.connected:
-                    self._circuit_manager._record_success(ioc_name)
-                else:
-                    self._circuit_manager._record_failure(ioc_name, Exception(epics_value.error or "Connection failed"))
-
-            return epics_value
-        except Exception as e:
-            logger.error(f"Error getting {pv_name}: {e}")
-
-            # Record failure with circuit breaker
-            if self._circuit_manager:
-                self._circuit_manager._record_failure(ioc_name, e)
-
-            return EpicsValue(value=None, connected=False, error=str(e))
+        if self._unprefixed_pva_fallback and is_unprefixed(pv_name):
+            pva_result = await self._get_single_pva(stripped, timeout=timeout)
+            if pva_result.connected:
+                return pva_result
+        return ca_result
 
     async def get_many(self, pv_names: list[str]) -> dict[str, EpicsValue]:
         """
@@ -172,22 +195,66 @@ class EpicsService:
 
         aioca handles parallel connections internally when given a list.
         """
-        results = {}
+        results: dict[str, EpicsValue] = {}
         logger.info(f"Starting get_many for {len(pv_names)} PVs")
 
+        ca_pairs: list[tuple[str, str]] = []
+        pva_pairs: list[tuple[str, str]] = []
+        unprefixed_pairs: list[tuple[str, str]] = []
+
+        for pv_name in pv_names:
+            protocol, stripped = parse_pv_name(pv_name)
+            if protocol == "pva":
+                pva_pairs.append((pv_name, stripped))
+            else:
+                ca_pairs.append((pv_name, stripped))
+                if is_unprefixed(pv_name):
+                    unprefixed_pairs.append((pv_name, stripped))
+
         try:
-            # aioca caget with list returns list of AugmentedValues
-            # throw=False returns values with .ok=False instead of raising
-            values = await caget(pv_names, format=FORMAT_TIME, timeout=self._timeout, throw=False)
-
-            for pv_name, result in zip(pv_names, values):
-                results[pv_name] = self._augmented_to_epics_value(pv_name, result)
-
+            if ca_pairs:
+                ca_names = [stripped for _, stripped in ca_pairs]
+                values = await caget(ca_names, format=FORMAT_TIME, timeout=self._timeout, throw=False)
+                for (original, _), result in zip(ca_pairs, values):
+                    results[original] = self._augmented_to_epics_value(original, result)
         except Exception as e:
-            logger.error(f"Batch read error: {e}")
-            for pv_name in pv_names:
+            logger.error(f"Batch CA read error: {e}")
+            for pv_name, _ in ca_pairs:
                 if pv_name not in results:
                     results[pv_name] = EpicsValue(value=None, connected=False, error=str(e))
+
+        if pva_pairs:
+            try:
+                pva = self._get_pva_service()
+                pva_names = [stripped for _, stripped in pva_pairs]
+                pva_results = await pva.get_many(pva_names)
+                for original, stripped in pva_pairs:
+                    results[original] = pva_results.get(
+                        stripped, EpicsValue(value=None, connected=False, error="PVA read failed")
+                    )
+            except Exception as e:
+                logger.error(f"Batch PVA read error: {e}")
+                for original, _ in pva_pairs:
+                    if original not in results:
+                        results[original] = EpicsValue(value=None, connected=False, error=str(e))
+
+        if self._unprefixed_pva_fallback and unprefixed_pairs:
+            fallback_pairs = []
+            for original, stripped in unprefixed_pairs:
+                existing = results.get(original)
+                if existing is None or not existing.connected:
+                    fallback_pairs.append((original, stripped))
+            if fallback_pairs:
+                try:
+                    pva = self._get_pva_service()
+                    fallback_names = [stripped for _, stripped in fallback_pairs]
+                    pva_results = await pva.get_many(fallback_names)
+                    for original, stripped in fallback_pairs:
+                        pva_result = pva_results.get(stripped)
+                        if pva_result and pva_result.connected:
+                            results[original] = pva_result
+                except Exception as e:
+                    logger.error(f"Batch unprefixed PVA fallback read error: {e}")
 
         logger.info(f"Completed get_many: {len(results)}/{len(pv_names)} PVs")
         return results
@@ -207,27 +274,41 @@ class EpicsService:
         if progress_callback:
             await progress_callback(0, total_pvs, "Starting to read PVs...")
 
-        results = {}
+        results: dict[str, EpicsValue] = {}
         batch_size = self._chunk_size
 
-        for i in range(0, total_pvs, batch_size):
-            batch = pv_names[i : i + batch_size]
+        ca_pairs: list[tuple[str, str]] = []
+        pva_pairs: list[tuple[str, str]] = []
+        unprefixed_pairs: list[tuple[str, str]] = []
+        for pv_name in pv_names:
+            protocol, stripped = parse_pv_name(pv_name)
+            if protocol == "pva":
+                pva_pairs.append((pv_name, stripped))
+            else:
+                ca_pairs.append((pv_name, stripped))
+                if is_unprefixed(pv_name):
+                    unprefixed_pairs.append((pv_name, stripped))
+
+        total_ca = len(ca_pairs)
+        for i in range(0, total_ca, batch_size):
+            batch_pairs = ca_pairs[i : i + batch_size]
+            batch_names = [stripped for _, stripped in batch_pairs]
 
             try:
                 # aioca handles parallel connections internally
-                batch_values = await caget(batch, format=FORMAT_TIME, timeout=self._timeout, throw=False)
+                batch_values = await caget(batch_names, format=FORMAT_TIME, timeout=self._timeout, throw=False)
 
-                for pv_name, result in zip(batch, batch_values):
-                    results[pv_name] = self._augmented_to_epics_value(pv_name, result)
+                for (original, _), result in zip(batch_pairs, batch_values):
+                    results[original] = self._augmented_to_epics_value(original, result)
 
             except Exception as e:
-                logger.error(f"Batch error: {e}")
-                for pv_name in batch:
+                logger.error(f"Batch CA error: {e}")
+                for pv_name, _ in batch_pairs:
                     if pv_name not in results:
                         results[pv_name] = EpicsValue(value=None, connected=False, error=str(e))
 
             # Report progress
-            current = min(i + batch_size, total_pvs)
+            current = min(i + batch_size, total_ca)
             connected_so_far = sum(1 for r in results.values() if r.connected)
             if progress_callback:
                 await progress_callback(
@@ -235,6 +316,45 @@ class EpicsService:
                 )
 
             logger.info(f"Read {current:,}/{total_pvs:,} PVs ({connected_so_far} connected)")
+
+        if pva_pairs:
+            try:
+                pva = self._get_pva_service()
+                pva_names = [stripped for _, stripped in pva_pairs]
+
+                async def pva_progress(current: int, total: int, message: str) -> None:
+                    if progress_callback:
+                        await progress_callback(total_ca + current, total_pvs, message)
+
+                pva_results = await pva.get_many_with_progress(pva_names, pva_progress if progress_callback else None)
+                for original, stripped in pva_pairs:
+                    results[original] = pva_results.get(
+                        stripped, EpicsValue(value=None, connected=False, error="PVA read failed")
+                    )
+            except Exception as e:
+                logger.error(f"PVA progress read error: {e}")
+                for original, _ in pva_pairs:
+                    if original not in results:
+                        results[original] = EpicsValue(value=None, connected=False, error=str(e))
+
+        if self._unprefixed_pva_fallback and unprefixed_pairs:
+            fallback_pairs = []
+            for original, stripped in unprefixed_pairs:
+                existing = results.get(original)
+                if existing is None or not existing.connected:
+                    fallback_pairs.append((original, stripped))
+
+            if fallback_pairs:
+                try:
+                    pva = self._get_pva_service()
+                    fallback_names = [stripped for _, stripped in fallback_pairs]
+                    fallback_results = await pva.get_many_with_progress(fallback_names, None)
+                    for original, stripped in fallback_pairs:
+                        pva_result = fallback_results.get(stripped)
+                        if pva_result and pva_result.connected:
+                            results[original] = pva_result
+                except Exception as e:
+                    logger.error(f"PVA fallback progress read error: {e}")
 
         if progress_callback:
             connected_count = sum(1 for r in results.values() if r.connected)
@@ -246,13 +366,31 @@ class EpicsService:
 
     async def put_single(self, pv_name: str, value: Any) -> tuple[bool, str | None]:
         """Write a value to a single PV."""
+        protocol, stripped = parse_pv_name(pv_name)
+        if protocol == "pva":
+            pva = self._get_pva_service()
+            return await pva.put_single(stripped, value)
+
         try:
-            result = await caput(pv_name, value, timeout=self._timeout, wait=True, throw=False)
+            result = await caput(stripped, value, timeout=self._timeout, wait=True, throw=False)
             if result.ok:
                 return True, None
-            return False, f"Failed to write to {pv_name}: {getattr(result, 'errorcode', 'unknown')}"
+            ca_error = f"Failed to write to {pv_name}: {getattr(result, 'errorcode', 'unknown')}"
+            if self._unprefixed_pva_fallback and is_unprefixed(pv_name):
+                pva = self._get_pva_service()
+                pva_ok, pva_error = await pva.put_single(stripped, value)
+                if pva_ok:
+                    return True, None
+                return False, f"{ca_error}; PVA fallback failed: {pva_error}"
+            return False, ca_error
         except Exception as e:
             logger.error(f"Error putting {pv_name}: {e}")
+            if self._unprefixed_pva_fallback and is_unprefixed(pv_name):
+                pva = self._get_pva_service()
+                pva_ok, pva_error = await pva.put_single(stripped, value)
+                if pva_ok:
+                    return True, None
+                return False, f"{e}; PVA fallback failed: {pva_error}"
             return False, str(e)
 
     async def put_many(self, values: dict[str, Any]) -> dict[str, tuple[bool, str | None]]:
@@ -261,28 +399,82 @@ class EpicsService:
 
         aioca caput with lists writes in sequence if PVs are pre-connected.
         """
-        results = {}
-        pv_names = list(values.keys())
-        pv_values = list(values.values())
+        results: dict[str, tuple[bool, str | None]] = {}
+        ca_pairs: list[tuple[str, str]] = []
+        pva_pairs: list[tuple[str, str]] = []
+        unprefixed_pairs: list[tuple[str, str]] = []
 
         try:
-            # Pre-connect all PVs for sequential write guarantee
-            await connect(pv_names, timeout=self._conn_timeout, throw=False)
-
-            # Write all values - aioca handles the list
-            put_results = await caput(pv_names, pv_values, timeout=self._timeout, wait=True, throw=False)
-
-            for pv_name, result in zip(pv_names, put_results):
-                if result.ok:
-                    results[pv_name] = (True, None)
+            for pv_name, pv_value in values.items():
+                protocol, stripped = parse_pv_name(pv_name)
+                if protocol == "pva":
+                    pva_pairs.append((pv_name, stripped))
                 else:
-                    results[pv_name] = (False, f"Failed: {getattr(result, 'errorcode', 'unknown')}")
+                    ca_pairs.append((pv_name, stripped))
+                    if is_unprefixed(pv_name):
+                        unprefixed_pairs.append((pv_name, stripped))
+
+            if ca_pairs:
+                pv_names = [stripped for _, stripped in ca_pairs]
+                pv_values = [values[original] for original, _ in ca_pairs]
+
+                # Pre-connect all PVs for sequential write guarantee
+                await connect(pv_names, timeout=self._conn_timeout, throw=False)
+
+                # Write all values - aioca handles the list
+                put_results = await caput(pv_names, pv_values, timeout=self._timeout, wait=True, throw=False)
+
+                for (original, _), result in zip(ca_pairs, put_results):
+                    if result.ok:
+                        results[original] = (True, None)
+                    else:
+                        results[original] = (False, f"Failed: {getattr(result, 'errorcode', 'unknown')}")
 
         except Exception as e:
             logger.error(f"Batch put error: {e}")
-            for pv_name in pv_names:
+            for pv_name, _ in ca_pairs:
                 if pv_name not in results:
                     results[pv_name] = (False, str(e))
+
+        if pva_pairs:
+            try:
+                pva = self._get_pva_service()
+                pva_values = {stripped: values[original] for original, stripped in pva_pairs}
+                pva_results = await pva.put_many(pva_values)
+                for original, stripped in pva_pairs:
+                    results[original] = pva_results.get(stripped, (False, "PVA write failed"))
+            except Exception as e:
+                logger.error(f"PVA put_many error: {e}")
+                for original, _ in pva_pairs:
+                    if original not in results:
+                        results[original] = (False, str(e))
+
+        if self._unprefixed_pva_fallback and unprefixed_pairs:
+            fallback_values: dict[str, Any] = {}
+            key_to_original: dict[str, str] = {}
+            for original, stripped in unprefixed_pairs:
+                ok, _ = results.get(original, (False, None))
+                if not ok:
+                    fallback_values[stripped] = values[original]
+                    key_to_original[stripped] = original
+
+            if fallback_values:
+                try:
+                    pva = self._get_pva_service()
+                    fallback_results = await pva.put_many(fallback_values)
+                    for stripped, (ok, err) in fallback_results.items():
+                        original = key_to_original[stripped]
+                        if ok:
+                            results[original] = (True, None)
+                        else:
+                            prev_ok, prev_err = results.get(original, (False, None))
+                            if not prev_ok:
+                                if prev_err:
+                                    results[original] = (False, f"{prev_err}; PVA fallback failed: {err}")
+                                else:
+                                    results[original] = (False, err)
+                except Exception as e:
+                    logger.error(f"PVA put_many fallback error: {e}")
 
         return results
 
@@ -291,6 +483,8 @@ class EpicsService:
         # aioca manages its own connections via libca
         # Can call purge_channel_caches() if needed
         purge_channel_caches()
+        if self._pva_service is not None:
+            await self._pva_service.shutdown()
 
 
 # Singleton instance

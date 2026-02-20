@@ -15,7 +15,10 @@ class TagGroupRepository(BaseRepository[TagGroup]):
     async def get_with_tags(self, group_id: str) -> TagGroup | None:
         """Get tag group with all tags loaded."""
         result = await self.session.execute(
-            select(TagGroup).options(selectinload(TagGroup.tags)).where(TagGroup.id == group_id)
+            select(TagGroup)
+            .options(selectinload(TagGroup.tags))
+            .where(TagGroup.id == group_id)
+            .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
 

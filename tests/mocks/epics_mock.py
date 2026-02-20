@@ -3,7 +3,7 @@ from typing import Any
 from datetime import datetime
 from collections.abc import Callable
 
-from app.services.epics_service import EpicsValue
+from app.services.epics_types import EpicsValue
 
 
 class MockEpicsService:

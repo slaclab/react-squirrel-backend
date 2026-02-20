@@ -2,6 +2,7 @@
 Pytest configuration and fixtures for squirrel-backend tests.
 """
 import asyncio
+import logging
 from collections.abc import Generator, AsyncGenerator
 
 import pytest
@@ -23,6 +24,13 @@ TEST_DATABASE_URL = "postgresql+asyncpg://squirrel:squirrel@localhost:5432/squir
 @pytest.fixture(scope="session")
 def event_loop() -> Generator:
     """Create event loop for async tests."""
+    # Silence noisy p4p atexit logging during pytest shutdown
+    p4p_logger = logging.getLogger("p4p")
+    p4p_logger.setLevel(logging.CRITICAL)
+    p4p_logger.propagate = False
+    if not p4p_logger.handlers:
+        p4p_logger.addHandler(logging.NullHandler())
+
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
@@ -165,7 +173,9 @@ async def sample_snapshot(client: AsyncClient, sample_pvs: list[dict], mock_epic
             mock_epics.set_mock_value(pv["readbackAddress"], 41.8)
 
     response = await client.post(
-        "/v1/snapshots", json={"title": "Test Snapshot", "description": "Snapshot for unit tests"}
+        "/v1/snapshots",
+        params={"async": "false", "use_cache": "false"},
+        json={"title": "Test Snapshot", "description": "Snapshot for unit tests"},
     )
     assert response.status_code == 200
     return response.json()["payload"]
