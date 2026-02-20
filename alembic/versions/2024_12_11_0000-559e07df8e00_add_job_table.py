@@ -1,8 +1,8 @@
 """Add job table for async task tracking
 
-Revision ID: 002_add_job
-Revises: 001_initial
-Create Date: 2024-12-11
+Revision ID: 559e07df8e00
+Revises: 8f6d5390d49b
+Create Date: 2024-12-11 00:00:00.000000
 
 """
 from collections.abc import Sequence
@@ -13,8 +13,8 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "002_add_job"
-down_revision: str | None = "001_initial"
+revision: str = "559e07df8e00"
+down_revision: str | None = "8f6d5390d49b"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

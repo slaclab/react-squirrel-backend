@@ -1,7 +1,7 @@
 """snapshot_comment_to_description
 
 Revision ID: 61476c608fc3
-Revises: 003_perf_indexes
+Revises: d365210f8676
 Create Date: 2026-02-20 10:30:10.488591
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "61476c608fc3"
-down_revision: str | None = "003_perf_indexes"
+down_revision: str | None = "d365210f8676"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
