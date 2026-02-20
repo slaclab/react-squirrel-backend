@@ -19,7 +19,7 @@ class ApiKeyRepository(BaseRepository[ApiKey]):
         )
         return result.scalars().first()
 
-    async def get_by_token_hash(self, token_hash: str, active_only: bool | None = None) -> ApiKey | None:
+    async def get_by_token_hash(self, token_hash: str, active_only: bool = False) -> ApiKey | None:
         """Get API Key by token hash, optionally filtered active keys."""
         query = select(ApiKey).where(ApiKey.token_hash == token_hash)
         if active_only:
