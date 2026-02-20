@@ -82,7 +82,7 @@ def upgrade() -> None:
         "snapshot",
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("title", sa.String(length=255), nullable=False),
-        sa.Column("description", sa.Text(), nullable=True),
+        sa.Column("comment", sa.Text(), nullable=True),
         sa.Column("created_by", sa.String(length=255), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
