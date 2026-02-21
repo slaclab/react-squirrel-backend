@@ -1,8 +1,8 @@
 """Add performance indexes for filtering and snapshot operations
 
-Revision ID: 003_perf_indexes
-Revises: 002_add_job
-Create Date: 2024-12-12
+Revision ID: d365210f8676
+Revises: 559e07df8e00
+Create Date: 2024-12-12 00:00:00.000000
 
 """
 from collections.abc import Sequence
@@ -10,8 +10,8 @@ from collections.abc import Sequence
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "003_perf_indexes"
-down_revision: str | None = "002_add_job"
+revision: str = "d365210f8676"
+down_revision: str | None = "559e07df8e00"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

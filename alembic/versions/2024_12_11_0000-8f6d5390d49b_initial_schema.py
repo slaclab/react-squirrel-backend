@@ -1,8 +1,8 @@
 """Initial schema creation
 
-Revision ID: 001_initial
+Revision ID: 8f6d5390d49b
 Revises:
-Create Date: 2024-12-11
+Create Date: 2024-12-11 00:00:00.000000
 
 """
 from collections.abc import Sequence
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "001_initial"
+revision: str = "8f6d5390d49b"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -82,7 +82,7 @@ def upgrade() -> None:
         "snapshot",
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("title", sa.String(length=255), nullable=False),
-        sa.Column("description", sa.Text(), nullable=True),
+        sa.Column("comment", sa.Text(), nullable=True),
         sa.Column("created_by", sa.String(length=255), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
