@@ -10,6 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - squirrel_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U squirrel"]
       interval: 5s
@@ -22,6 +23,7 @@ services:
     command: redis-server --requirepass squirrel
     ports:
       - "6379:6379"
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "squirrel", "ping"]
       interval: 5s
