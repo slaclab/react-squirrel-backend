@@ -1,7 +1,7 @@
 """Add api_key table for application access tokens
 
-Revision ID: 004_add_api_key
-Revises: 003_perf_indexes
+Revision ID: c4797e015c4b
+Revises: 61476c608fc3
 Create Date: 2026-02-19
 
 """
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "004_add_api_key"
-down_revision: str | None = "003_perf_indexes"
+revision: str = "c4797e015c4b"
+down_revision: str | None = "61476c608fc3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
