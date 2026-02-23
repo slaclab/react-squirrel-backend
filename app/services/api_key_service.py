@@ -6,7 +6,7 @@ import secrets
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.api_key import ApiKey
-from app.schemas.api_key import ApiKeyCreateDTO, ApiKeyDTO, ApiKeyCreateResultDTO
+from app.schemas.api_key import ApiKeyDTO, ApiKeyCreateDTO, ApiKeyCreateResultDTO
 from app.repositories.api_key_repository import ApiKeyRepository
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,11 @@ class ApiKeyService:
         """Get total count of API Keys."""
         return await self.repo.count()
 
+    async def get_count_active(self) -> int:
+        """Get count of active API Keys."""
+        active = await self.repo.get_active()
+        return len(active)
+
     async def get_by_id(self, key_id: str) -> ApiKeyDTO | None:
         """Get API Key by ID."""
         api_key = await self.repo.get_by_id(key_id)
@@ -81,6 +86,8 @@ class ApiKeyService:
         """Deactivate API Key by ID."""
         api_key = await self.repo.get_by_id(key_id)
         if not api_key:
-            return None
+            raise ValueError(f"API Key with id '{key_id}' not found.")
+        if not api_key.is_active:
+            raise ValueError(f"API Key with id '{key_id}' is already inactive.")
         inactive_key = await self.repo.deactivate_api_key(api_key)
         return self._to_dto(inactive_key)
