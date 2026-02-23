@@ -52,14 +52,9 @@ class ApiKeyService:
         created_key = await self.repo.create(api_key)
         return ApiKeyCreateResultDTO(token=plaintext_token, **self._to_dto(created_key).model_dump())
 
-    async def get_count(self) -> int:
-        """Get total count of API Keys."""
-        return await self.repo.count()
-
-    async def get_count_active(self) -> int:
-        """Get count of active API Keys."""
-        active = await self.repo.get_active()
-        return len(active)
+    async def get_count(self, active_only: bool = False) -> int:
+        """Get total count of API Keys. Optionally filter by active status."""
+        return await self.repo.count(active_only)
 
     async def get_by_id(self, key_id: str) -> ApiKeyDTO | None:
         """Get API Key by ID."""
@@ -72,15 +67,10 @@ class ApiKeyService:
         api_key = await self.repo.get_by_token_hash(token_hash, active_only)
         return self._to_dto(api_key) if api_key else None
 
-    async def list_keys(self) -> list[ApiKeyDTO]:
-        """List all API Keys (without token hash)."""
-        all_keys = await self.repo.get_all()
+    async def list_keys(self, active_only: bool = False) -> list[ApiKeyDTO]:
+        """List all API Keys (without token hash). Optionally filter by active status."""
+        all_keys = await self.repo.get_all(active_only)
         return list(map(self._to_dto, all_keys))
-
-    async def list_active_keys(self) -> list[ApiKeyDTO]:
-        """List all active API Keys (without token hash)."""
-        active_keys = await self.repo.get_active()
-        return list(map(self._to_dto, active_keys))
 
     async def deactivate_key(self, key_id: str) -> ApiKeyDTO | None:
         """Deactivate API Key by ID."""

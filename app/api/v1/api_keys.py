@@ -11,13 +11,10 @@ router = APIRouter(prefix="/api-keys", tags=["ApiKeys"])
 
 
 @router.get("")
-async def list_all_keys(active: bool, db: AsyncSession = Depends(get_db)) -> list[ApiKeyDTO]:
+async def list_all_keys(active_only: bool = False, db: AsyncSession = Depends(get_db)) -> list[ApiKeyDTO]:
     """List all API Keys, optionally filtered by active status."""
     service = ApiKeyService(db)
-    if active:
-        keys = await service.list_active_keys()
-    else:
-        keys = await service.list_keys()
+    keys = await service.list_keys(active_only)
     return keys
 
 
@@ -47,7 +44,7 @@ async def bootstrap_api_key(db: AsyncSession = Depends(get_db)) -> ApiKeyCreateR
     """Bootstrap an API Key for initial setup."""
     service = ApiKeyService(db)
 
-    existing_count = await service.get_count_active()
+    existing_count = await service.get_count(active_only=True)
     if existing_count > 0:
         raise APIException(
             status.HTTP_403_FORBIDDEN,
@@ -60,7 +57,7 @@ async def bootstrap_api_key(db: AsyncSession = Depends(get_db)) -> ApiKeyCreateR
 
 
 @router.get("/count")
-async def get_api_key_count(db: AsyncSession = Depends(get_db)) -> int:
+async def get_api_key_count(active_only: bool = False, db: AsyncSession = Depends(get_db)) -> int:
     """Get the current number of API Keys."""
     service = ApiKeyService(db)
-    return await service.get_count()
+    return await service.get_count(active_only)
