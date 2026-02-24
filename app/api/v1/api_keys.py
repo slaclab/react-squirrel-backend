@@ -34,8 +34,10 @@ async def deactivate_api_key(key_id: str, db: AsyncSession = Depends(get_db)) ->
     service = ApiKeyService(db)
     try:
         deactivated_key = await service.deactivate_key(key_id)
-    except ValueError as e:
+    except LookupError as e:
         raise APIException(status.HTTP_404_NOT_FOUND, str(e), status_code=status.HTTP_404_NOT_FOUND)
+    except ValueError as e:
+        raise APIException(status.HTTP_409_CONFLICT, str(e), status_code=status.HTTP_409_CONFLICT)
     return deactivated_key
 
 

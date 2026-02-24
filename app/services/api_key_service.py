@@ -1,4 +1,5 @@
 """Service for managing API Keys for authorization."""
+
 import hashlib
 import logging
 import secrets
@@ -76,7 +77,7 @@ class ApiKeyService:
         """Deactivate API Key by ID."""
         api_key = await self.repo.get_by_id(key_id)
         if not api_key:
-            raise ValueError(f"API Key with id '{key_id}' not found.")
+            raise LookupError(f"API Key with id '{key_id}' not found.")
         if not api_key.is_active:
             raise ValueError(f"API Key with id '{key_id}' is already inactive.")
         inactive_key = await self.repo.deactivate_api_key(api_key)
