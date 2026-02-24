@@ -18,7 +18,7 @@ class ApiKeyRepository(BaseRepository[ApiKey]):
         """Get count of all API Keys. Optionally filter by active status."""
         query = select(func.count()).select_from(self.model)
         if active_only:
-            query = query.having(ApiKey.is_active)
+            query = query.where(ApiKey.is_active)
         result = await self.session.execute(query)
         return result.scalar() or 0
 
