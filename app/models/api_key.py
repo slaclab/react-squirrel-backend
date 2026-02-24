@@ -1,5 +1,5 @@
 """API_Key model for tracking API Keys for application access to the backend."""
-from sqlalchemy import String, Boolean, Index, text
+from sqlalchemy import Index, String, Boolean, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, UUIDMixin, TimestampMixin
