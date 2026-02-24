@@ -17,6 +17,12 @@ from app.db.session import get_db
 from tests.mocks.epics_mock import MockEpicsService
 from app.services.epics_service import get_epics_service
 
+# Silence noisy p4p atexit logging during pytest shutdown
+_p4p_logger = logging.getLogger("p4p")
+_p4p_logger.setLevel(logging.CRITICAL)
+_p4p_logger.propagate = False
+_p4p_logger.handlers = [logging.NullHandler()]
+
 # Test database URL - uses a separate test database
 TEST_DATABASE_URL = "postgresql+asyncpg://squirrel:squirrel@localhost:5432/squirrel_test"
 
@@ -24,13 +30,6 @@ TEST_DATABASE_URL = "postgresql+asyncpg://squirrel:squirrel@localhost:5432/squir
 @pytest.fixture(scope="session")
 def event_loop() -> Generator:
     """Create event loop for async tests."""
-    # Silence noisy p4p atexit logging during pytest shutdown
-    p4p_logger = logging.getLogger("p4p")
-    p4p_logger.setLevel(logging.CRITICAL)
-    p4p_logger.propagate = False
-    if not p4p_logger.handlers:
-        p4p_logger.addHandler(logging.NullHandler())
-
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
