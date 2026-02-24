@@ -1,4 +1,4 @@
-"""Repository for Job model operations."""
+"""Repository for ApiKey model operations."""
 from sqlalchemy import func, select
 from typing_extensions import override
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,8 +20,6 @@ class ApiKeyRepository(BaseRepository[ApiKey]):
         if active_only:
             query = query.having(ApiKey.is_active)
         result = await self.session.execute(query)
-
-        # result = await self.session.execute(select(func.count()).select_from(self.model))
         return result.scalar() or 0
 
     @override
