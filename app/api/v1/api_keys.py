@@ -3,6 +3,7 @@ from fastapi import Depends, APIRouter, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.dependencies import require_read_access, require_write_access
 from app.api.responses import APIException
 from app.schemas.api_key import ApiKeyDTO, ApiKeyCreateDTO, ApiKeyCreateResultDTO
 from app.services.api_key_service import ApiKeyService
@@ -10,7 +11,7 @@ from app.services.api_key_service import ApiKeyService
 router = APIRouter(prefix="/api-keys", tags=["ApiKeys"])
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_read_access)])
 async def list_all_keys(active_only: bool = False, db: AsyncSession = Depends(get_db)) -> list[ApiKeyDTO]:
     """List all API Keys, optionally filtered by active status."""
     service = ApiKeyService(db)
@@ -18,7 +19,7 @@ async def list_all_keys(active_only: bool = False, db: AsyncSession = Depends(ge
     return keys
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_write_access)])
 async def create_api_key(data: ApiKeyCreateDTO, db: AsyncSession = Depends(get_db)) -> ApiKeyCreateResultDTO:
     """Create a new API Key."""
     service = ApiKeyService(db)
@@ -28,7 +29,7 @@ async def create_api_key(data: ApiKeyCreateDTO, db: AsyncSession = Depends(get_d
         raise APIException(status.HTTP_409_CONFLICT, str(e), status_code=status.HTTP_409_CONFLICT)
 
 
-@router.delete("/{key_id}")
+@router.delete("/{key_id}", dependencies=[Depends(require_write_access)])
 async def deactivate_api_key(key_id: str, db: AsyncSession = Depends(get_db)) -> ApiKeyDTO:
     """Deactivate an API Key by ID."""
     service = ApiKeyService(db)
@@ -58,7 +59,7 @@ async def bootstrap_api_key(db: AsyncSession = Depends(get_db)) -> ApiKeyCreateR
     return await service.create_key(data)
 
 
-@router.get("/count")
+@router.get("/count", dependencies=[Depends(require_read_access)])
 async def get_api_key_count(active_only: bool = False, db: AsyncSession = Depends(get_db)) -> int:
     """Get the current number of API Keys."""
     service = ApiKeyService(db)
