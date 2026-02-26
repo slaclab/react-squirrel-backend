@@ -26,7 +26,7 @@ from collections import defaultdict
 from fastapi import Security, APIRouter, WebSocket, WebSocketDisconnect
 
 from app.config import get_settings
-from app.dependencies import require_read_access
+from app.dependencies import require_read_access, ws_require_read_access
 from app.services.redis_service import get_redis_service
 from app.services.subscription_registry import (
     SubscriptionRegistry,
@@ -427,7 +427,7 @@ def get_connection_manager() -> DiffStreamManager:
 # ============================================================
 
 
-@router.websocket("/ws/pvs")
+@router.websocket("/pvs", dependencies=[Security(ws_require_read_access)])
 async def websocket_pvs(websocket: WebSocket):
     """
     WebSocket endpoint for real-time PV updates with diff streaming.
@@ -495,7 +495,7 @@ async def websocket_pvs(websocket: WebSocket):
         await diff_manager.disconnect(client_id)
 
 
-@router.websocket("/ws/live")
+@router.websocket("/live", dependencies=[Security(ws_require_read_access)])
 async def websocket_live_stream(websocket: WebSocket):
     """
     Alternative WebSocket endpoint (alias for /ws/pvs).
