@@ -2,7 +2,7 @@ import logging
 from uuid import UUID
 
 from arq import create_pool
-from fastapi import Query, Depends, APIRouter, BackgroundTasks
+from fastapi import Query, Depends, Security, APIRouter, BackgroundTasks
 from arq.connections import RedisSettings
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.db.session import get_db
 from app.models.job import JobType
 from app.schemas.job import JobCreatedDTO
+from app.dependencies import require_read_access, require_write_access
 from app.api.responses import APIException, success_response
 from app.schemas.snapshot import NewSnapshotDTO, RestoreRequestDTO, UpdateSnapshotDTO
 from app.services.job_service import JobService
@@ -40,28 +41,28 @@ async def get_arq_pool():
     return _arq_pool
 
 
-@router.get("", response_model=dict)
+@router.get("", dependencies=[Security(require_read_access)])
 async def list_snapshots(
     title: str | None = Query(None),
     tags: list[str]
     | None = Query(None, description="Filter by tag IDs (returns snapshots containing PVs with any of these tags)"),
     db: AsyncSession = Depends(get_db),
     epics: EpicsService = Depends(get_epics_service),
-):
+) -> dict:
     """List all snapshots, optionally filtered by title and/or tags."""
     service = SnapshotService(db, epics)
     snapshots = await service.list_snapshots(title=title, tag_ids=tags)
     return success_response(snapshots)
 
 
-@router.get("/{snapshot_id}", response_model=dict)
+@router.get("/{snapshot_id}", dependencies=[Security(require_read_access)])
 async def get_snapshot(
     snapshot_id: str,
     limit: int | None = Query(None, description="Limit number of PV values returned"),
     offset: int = Query(0, description="Offset for pagination"),
     db: AsyncSession = Depends(get_db),
     epics: EpicsService = Depends(get_epics_service),
-):
+) -> dict:
     """
     Get snapshot by ID with values.
 
@@ -79,7 +80,7 @@ async def get_snapshot(
     return success_response(snapshot)
 
 
-@router.post("", response_model=dict)
+@router.post("", dependencies=[Security(require_write_access)])
 async def create_snapshot(
     data: NewSnapshotDTO,
     background_tasks: BackgroundTasks,
@@ -88,7 +89,7 @@ async def create_snapshot(
     use_cache: bool = Query(True, description="Read from Redis cache (instant) vs direct EPICS read"),
     use_arq: bool = Query(True, description="Use Arq persistent queue (recommended) vs FastAPI BackgroundTasks"),
     epics: EpicsService = Depends(get_epics_service),
-):
+) -> dict:
     """
     Create a new snapshot by reading all PVs.
 
@@ -162,12 +163,12 @@ async def create_snapshot(
         return success_response(snapshot)
 
 
-@router.put("/{snapshot_id}", response_model=dict)
+@router.put("/{snapshot_id}", dependencies=[Security(require_write_access)])
 async def update_snapshot(
     snapshot_id: str,
     data: UpdateSnapshotDTO,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:
     """Update snapshot title and/or description."""
     epics = get_epics_service()
     service = SnapshotService(db, epics)
@@ -184,13 +185,13 @@ async def update_snapshot(
     return success_response(snapshot)
 
 
-@router.post("/{snapshot_id}/restore", response_model=dict)
+@router.post("/{snapshot_id}/restore", dependencies=[Security(require_write_access)])
 async def restore_snapshot(
     snapshot_id: str,
     request: RestoreRequestDTO | None = None,
     db: AsyncSession = Depends(get_db),
     epics: EpicsService = Depends(get_epics_service),
-):
+) -> dict:
     """
     Restore PV values from a snapshot to EPICS.
 
@@ -211,13 +212,13 @@ async def restore_snapshot(
     return success_response(result)
 
 
-@router.delete("/{snapshot_id}", response_model=dict)
+@router.delete("/{snapshot_id}", dependencies=[Security(require_write_access)])
 async def delete_snapshot(
     snapshot_id: str,
     deleteData: bool = Query(True),
     db: AsyncSession = Depends(get_db),
     epics: EpicsService = Depends(get_epics_service),
-):
+) -> dict:
     """Delete a snapshot."""
     try:
         UUID(snapshot_id)
@@ -230,13 +231,13 @@ async def delete_snapshot(
     return success_response(True)
 
 
-@router.get("/{snapshot1_id}/compare/{snapshot2_id}", response_model=dict)
+@router.get("/{snapshot1_id}/compare/{snapshot2_id}", dependencies=[Security(require_read_access)])
 async def compare_snapshots(
     snapshot1_id: str,
     snapshot2_id: str,
     db: AsyncSession = Depends(get_db),
     epics: EpicsService = Depends(get_epics_service),
-):
+) -> dict:
     """Compare two snapshots and return differences."""
     try:
         UUID(snapshot1_id)
