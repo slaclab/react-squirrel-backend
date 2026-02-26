@@ -23,9 +23,10 @@ import asyncio
 import logging
 from collections import defaultdict
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import Security, APIRouter, WebSocket, WebSocketDisconnect
 
 from app.config import get_settings
+from app.dependencies import require_read_access
 from app.services.redis_service import get_redis_service
 from app.services.subscription_registry import (
     SubscriptionRegistry,
@@ -38,7 +39,7 @@ settings = get_settings()
 # Unique instance ID for this API process
 INSTANCE_ID = os.environ.get("SQUIRREL_INSTANCE_ID", str(uuid.uuid4())[:8])
 
-router = APIRouter(tags=["WebSocket"])
+router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
 
 class DiffStreamManager:
@@ -504,8 +505,8 @@ async def websocket_live_stream(websocket: WebSocket):
     await websocket_pvs(websocket)
 
 
-@router.get("/ws/status", response_model=dict)
-async def websocket_status():
+@router.get("/status", dependencies=[Security(require_read_access)])
+async def websocket_status() -> dict:
     """Get WebSocket connection and subscription status."""
     diff_manager = get_diff_manager()
     stats = diff_manager.get_subscription_stats()
