@@ -10,76 +10,19 @@ Provides health monitoring endpoints for:
 from datetime import datetime
 
 from fastapi import Security, APIRouter, HTTPException
-from pydantic import BaseModel
 
 from app.dependencies import require_read_access, require_write_access
 from app.api.responses import success_response
+from app.schemas.health import (
+    HealthSummaryResponse,
+    MonitorHealthResponse,
+    WatchdogStatsResponse,
+)
 from app.services.watchdog import get_watchdog
 from app.services.pv_monitor import get_pv_monitor
 from app.services.redis_service import get_redis_service
 
 router = APIRouter(prefix="/health", tags=["Health"])
-
-
-# ============================================================
-# Response Models
-# ============================================================
-
-
-class HeartbeatResponse(BaseModel):
-    """Simple heartbeat response for frontend polling."""
-
-    timestamp: float | None
-    alive: bool
-
-
-class MonitorHealthResponse(BaseModel):
-    """Comprehensive monitor health response."""
-
-    alive: bool
-    last_heartbeat: datetime | None
-    heartbeat_age_seconds: float | None
-    total_cached_pvs: int
-    connected_pvs: int
-    disconnected_pvs: int
-    monitored_pvs: int
-    active_subscriptions: int
-    monitor_running: bool
-    watchdog_running: bool
-    watchdog_last_check: datetime | None
-
-
-class WatchdogStatsResponse(BaseModel):
-    """Watchdog statistics response."""
-
-    last_check: datetime | None
-    check_count: int
-    disconnected_count: int
-    stale_count: int
-    reconnect_attempts: int
-    successful_reconnects: int
-    failed_reconnects: int
-    last_errors: list[str]
-
-
-class HealthSummaryResponse(BaseModel):
-    """Complete health summary for dashboard."""
-
-    status: str  # "healthy", "degraded", "unhealthy"
-    monitor_alive: bool
-    heartbeat_age_seconds: float | None
-    total_pvs: int
-    connected_pvs: int
-    disconnected_pvs: int
-    disconnected_percentage: float
-    watchdog_running: bool
-    last_watchdog_check: datetime | None
-    issues: list[str]
-
-
-# ============================================================
-# Endpoints
-# ============================================================
 
 
 @router.get("/heartbeat")
