@@ -6,14 +6,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import status
+from fastapi.exceptions import WebSocketException
 
 from app.dependencies import (
     get_api_key,
     get_pv_service,
+    ws_get_api_key,
     get_tag_service,
     require_read_access,
     get_snapshot_service,
     require_write_access,
+    ws_require_read_access,
+    ws_require_write_access,
 )
 from app.api.responses import APIException
 from app.schemas.api_key import ApiKeyDTO
@@ -39,6 +43,13 @@ def _make_api_key_dto(**overrides) -> ApiKeyDTO:
     }
     defaults.update(overrides)
     return ApiKeyDTO(**defaults)
+
+
+def _make_websocket(api_key: str | None = None) -> MagicMock:
+    """Build a minimal WebSocket mock with a headers mapping."""
+    ws = MagicMock()
+    ws.headers = {"X-API-Key": api_key} if api_key is not None else {}
+    return ws
 
 
 # ---------------------------------------------------------------------------
@@ -218,3 +229,133 @@ class TestRequireWriteAccess:
         with pytest.raises(APIException) as exc_info:
             require_write_access(dto)
         assert "write" in exc_info.value.error_message.lower()
+
+
+# ---------------------------------------------------------------------------
+# ws_get_api_key
+# ---------------------------------------------------------------------------
+
+
+class TestWsGetApiKey:
+    """Tests for ws_get_api_key dependency."""
+
+    @pytest.mark.asyncio
+    async def test_missing_header_raises_ws_exception(self):
+        """No X-API-Key header should raise WebSocketException 1008."""
+        ws = _make_websocket()
+        db = MagicMock()
+        with pytest.raises(WebSocketException) as exc_info:
+            await ws_get_api_key(ws, db)
+        assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
+
+    @pytest.mark.asyncio
+    async def test_unknown_token_raises_ws_exception(self):
+        """A token not found in the DB should raise WebSocketException 1008."""
+        ws = _make_websocket("sq_unknown")
+        db = MagicMock()
+        with patch("app.dependencies.ApiKeyService") as MockService:
+            MockService.return_value.get_by_token = AsyncMock(return_value=None)
+            with pytest.raises(WebSocketException) as exc_info:
+                await ws_get_api_key(ws, db)
+        assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
+
+    @pytest.mark.asyncio
+    async def test_inactive_key_raises_ws_exception(self):
+        """A deactivated key should raise WebSocketException 1008."""
+        ws = _make_websocket("sq_inactive")
+        db = MagicMock()
+        inactive_key = _make_api_key_dto(isActive=False)
+        with patch("app.dependencies.ApiKeyService") as MockService:
+            MockService.return_value.get_by_token = AsyncMock(return_value=inactive_key)
+            with pytest.raises(WebSocketException) as exc_info:
+                await ws_get_api_key(ws, db)
+        assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
+
+    @pytest.mark.asyncio
+    async def test_active_key_returns_dto(self):
+        """A valid, active key should be returned as-is."""
+        ws = _make_websocket("sq_valid_token")
+        db = MagicMock()
+        active_key = _make_api_key_dto(isActive=True)
+        with patch("app.dependencies.ApiKeyService") as MockService:
+            MockService.return_value.get_by_token = AsyncMock(return_value=active_key)
+            result = await ws_get_api_key(ws, db)
+        assert result is active_key
+
+    @pytest.mark.asyncio
+    async def test_service_receives_provided_token(self):
+        """The exact header value should be forwarded to ApiKeyService.get_by_token."""
+        token = "sq_specific_token_value"
+        ws = _make_websocket(token)
+        db = MagicMock()
+        with patch("app.dependencies.ApiKeyService") as MockService:
+            mock_get = AsyncMock(return_value=None)
+            MockService.return_value.get_by_token = mock_get
+            with pytest.raises(WebSocketException):
+                await ws_get_api_key(ws, db)
+        mock_get.assert_awaited_once_with(token)
+
+    @pytest.mark.asyncio
+    async def test_error_reason_mentions_api_key(self):
+        """WebSocketException reason should reference the API key."""
+        ws = _make_websocket()
+        db = MagicMock()
+        with pytest.raises(WebSocketException) as exc_info:
+            await ws_get_api_key(ws, db)
+        assert "api key" in exc_info.value.reason.lower()
+
+
+# ---------------------------------------------------------------------------
+# ws_require_read_access
+# ---------------------------------------------------------------------------
+
+
+class TestWsRequireReadAccess:
+    """Tests for ws_require_read_access dependency."""
+
+    def test_raises_ws_exception_when_read_access_false(self):
+        """A key without read access should raise WebSocketException 1008."""
+        dto = _make_api_key_dto(readAccess=False)
+        with pytest.raises(WebSocketException) as exc_info:
+            ws_require_read_access(dto)
+        assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
+
+    def test_passes_when_read_access_true(self):
+        """A key with read access should not raise."""
+        dto = _make_api_key_dto(readAccess=True)
+        ws_require_read_access(dto)  # must not raise
+
+    def test_error_reason_mentions_read(self):
+        """WebSocketException reason should indicate lack of read access."""
+        dto = _make_api_key_dto(readAccess=False)
+        with pytest.raises(WebSocketException) as exc_info:
+            ws_require_read_access(dto)
+        assert "read" in exc_info.value.reason.lower()
+
+
+# ---------------------------------------------------------------------------
+# ws_require_write_access
+# ---------------------------------------------------------------------------
+
+
+class TestWsRequireWriteAccess:
+    """Tests for ws_require_write_access dependency."""
+
+    def test_raises_ws_exception_when_write_access_false(self):
+        """A key without write access should raise WebSocketException 1008."""
+        dto = _make_api_key_dto(writeAccess=False)
+        with pytest.raises(WebSocketException) as exc_info:
+            ws_require_write_access(dto)
+        assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
+
+    def test_passes_when_write_access_true(self):
+        """A key with write access should not raise."""
+        dto = _make_api_key_dto(writeAccess=True)
+        ws_require_write_access(dto)  # must not raise
+
+    def test_error_reason_mentions_write(self):
+        """WebSocketException reason should indicate lack of write access."""
+        dto = _make_api_key_dto(writeAccess=False)
+        with pytest.raises(WebSocketException) as exc_info:
+            ws_require_write_access(dto)
+        assert "write" in exc_info.value.reason.lower()
