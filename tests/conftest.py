@@ -3,6 +3,7 @@ Pytest configuration and fixtures for squirrel-backend tests.
 """
 import asyncio
 import logging
+from datetime import datetime
 from collections.abc import Generator, AsyncGenerator
 
 import pytest
@@ -14,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.main import app
 from app.models import Base
 from app.db.session import get_db
+from app.dependencies import get_api_key
+from app.schemas.api_key import ApiKeyDTO
 from tests.mocks.epics_mock import MockEpicsService
 from app.services.epics_service import get_epics_service
 
@@ -87,9 +90,21 @@ async def client(db_session: AsyncSession, mock_epics: MockEpicsService) -> Asyn
     def override_get_epics():
         return mock_epics
 
+    async def override_get_api_key() -> ApiKeyDTO:
+        return ApiKeyDTO(
+            id="test-key-id",
+            appName="TestClient",
+            isActive=True,
+            readAccess=True,
+            writeAccess=True,
+            createdAt=datetime.now(),
+            updatedAt=datetime.now(),
+        )
+
     # Override dependencies
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_epics_service] = override_get_epics
+    app.dependency_overrides[get_api_key] = override_get_api_key
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as test_client:
         yield test_client
