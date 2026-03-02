@@ -1,12 +1,12 @@
 # Project Information
-site_name: eed-swapps-template
-site_url: https://slaclab.github.io/eed-swapps-template/
+site_name: Squirrel Backend
+site_url: https://slaclab.github.io/react-squirrel-backend/
 site_author: SLAC National Accelerator Laboratory - EED / Software Applications Group
-site_description: Documentation for the eed-swapps-template software application.
+site_description: High-performance Python FastAPI backend for EPICS snapshot/restore operations.
 
 # Repository
-repo_name: slaclab/eed-swapps-template
-repo_url: https://github.com/slaclab/eed-swapps-template
+repo_name: slaclab/react-squirrel-backend
+repo_url: https://github.com/slaclab/react-squirrel-backend
 
 # Configuration
 theme:
@@ -19,19 +19,23 @@ theme:
     - navigation.tabs
     - navigation.indexes
     - navigation.footer
+    - navigation.sections
     - search.highlight
     - search.share
     - search.suggest
+    - toc.follow
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: black
+      primary: indigo
+      accent: indigo
       toggle:
         icon: material/toggle-switch-off-outline
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: black
+      primary: indigo
+      accent: indigo
       toggle:
         icon: material/toggle-switch
         name: Switch to light mode
@@ -42,12 +46,13 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
-          paths: [eed-swapps-template]
+          paths: [.]
           options:
-            docstring_style: numpy
+            docstring_style: google
             members_order: source
             show_root_toc_entry: false
             show_symbol_type_toc: true
+            show_source: true
             docstring_options:
               ignore_init_summary: true
             merge_init_into_class: true
@@ -59,7 +64,7 @@ plugins:
   - git-committers:
       exclude:
         - index.md
-      repository: slaclab/eed-swapps-template
+      repository: slaclab/react-squirrel-backend
       branch: main
 
 # Additional Configuration
@@ -70,6 +75,13 @@ extra:
 markdown_extensions:
   - attr_list
   - md_in_html
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - toc:
       permalink: true
   - pymdownx.emoji:
@@ -78,15 +90,32 @@ markdown_extensions:
       options:
         custom_icons:
           - images/
-  - pymdownx.highlight
-  - pymdownx.superfences
-  - pymdownx.blocks.caption
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
 
 # Page Tree
 nav:
   - Home: index.md
-  - How To:
-    - how_to/index.md
+  - Getting Started:
+    - getting-started/index.md
+    - Installation: getting-started/installation.md
+    - Configuration: getting-started/configuration.md
+  - Architecture:
+    - architecture/index.md
+    - Distributed System: architecture/distributed-system.md
+    - Data Flow: architecture/data-flow.md
+  - Development:
+    - development/index.md
+    - Testing: development/testing.md
+    - Database Migrations: development/migrations.md
+    - Code Quality: development/code-quality.md
   - API Reference:
-    - api_reference/index.md
-    - api_reference/hello_world.md
+    - api-reference/index.md
+    - REST Endpoints: api-reference/endpoints.md
+    - WebSocket: api-reference/websocket.md
+  - Python Reference:
+    - reference/index.md

@@ -98,3 +98,6 @@ Thumbs.db
 
 # PyPI configuration file
 .pypirc
+
+# MkDocs
+site/
