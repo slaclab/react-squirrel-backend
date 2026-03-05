@@ -1,0 +1,78 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: squirrel
+      POSTGRES_PASSWORD: squirrel
+      POSTGRES_DB: squirrel_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - squirrel_dev_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U squirrel"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass squirrel
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "squirrel", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - ../.env.dev
+    ports:
+      - "8080:8000"
+    volumes:
+      - ../app:/app/app
+      - ../tests:/app/tests
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  monitor:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    command: python -m app.monitor_main
+    env_file:
+      - ../.env.dev
+    volumes:
+      - ../app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    command: arq app.worker.WorkerSettings
+    env_file:
+      - ../.env.dev
+    volumes:
+      - ../app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  squirrel_dev_db_data:
