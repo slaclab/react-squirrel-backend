@@ -1,0 +1,28 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Release tag to deploy (e.g., v1.2.0)'
+        required: true
+        type: string
+
+permissions:
+  deployments: write
+  contents: read
+  actions: read
+
+jobs:
+  deploy:
+    uses: ad-build-test/build-system-playbooks/.github/workflows/request-deployment.yml@main
+    with:
+      deploy_to_container_prod: true
+      tag: ${{ inputs.image_tag }}
+      deployment_type: container
+      docker_network: squirrel-net
+      migration_command: alembic upgrade head
+      health_check_path: /docs
+    secrets:
+      database_url: ${{ secrets.PROD_DATABASE_URL }}
+      redis_url: ${{ secrets.PROD_REDIS_URL }}
