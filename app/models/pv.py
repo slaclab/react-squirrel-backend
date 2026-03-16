@@ -26,8 +26,8 @@ class PV(Base, UUIDMixin, TimestampMixin):
 
     # PV addresses (at least one required - enforced at service layer)
     setpoint_address: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
-    readback_address: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
-    config_address: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
+    readback_address: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    config_address: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
 
     # Metadata
     device: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)

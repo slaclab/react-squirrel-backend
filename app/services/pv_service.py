@@ -1,3 +1,4 @@
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pv import PV
@@ -33,6 +34,14 @@ class PVService:
             lastModifiedDate=pv.updated_at,
         )
 
+    @staticmethod
+    def _normalize_address(address: str | None) -> str | None:
+        """Normalize optional PV addresses from API payloads."""
+        if address is None:
+            return None
+        normalized = address.strip()
+        return normalized or None
+
     async def search_paged(
         self,
         search: str | None = None,
@@ -61,12 +70,17 @@ class PVService:
 
     async def create(self, data: NewPVElementDTO) -> PVElementDTO:
         """Create a new PV."""
+        setpoint_address = self._normalize_address(data.setpointAddress)
+        readback_address = self._normalize_address(data.readbackAddress)
+        config_address = self._normalize_address(data.configAddress)
+        if not any([setpoint_address, readback_address, config_address]):
+            raise ValueError("At least one address (setpoint, readback, or config) is required")
+
         # Check for duplicate addresses
-        for address in [data.setpointAddress, data.readbackAddress, data.configAddress]:
-            if address:
-                existing = await self.pv_repo.find_by_address(address)
-                if existing:
-                    raise ValueError(f"PV with address '{address}' already exists")
+        if setpoint_address:
+            existing = await self.pv_repo.find_by_setpoint(setpoint_address)
+            if existing:
+                raise ValueError(f"PV with setpoint address '{setpoint_address}' already exists")
 
         # Get tags
         tags = []
@@ -76,9 +90,9 @@ class PVService:
                 raise ValueError("One or more tag IDs are invalid")
 
         pv = PV(
-            setpoint_address=data.setpointAddress,
-            readback_address=data.readbackAddress,
-            config_address=data.configAddress,
+            setpoint_address=setpoint_address,
+            readback_address=readback_address,
+            config_address=config_address,
             device=data.device,
             description=data.description,
             abs_tolerance=data.absTolerance,
@@ -87,14 +101,41 @@ class PVService:
             tags=tags,
         )
 
-        pv = await self.pv_repo.create(pv)
+        try:
+            pv = await self.pv_repo.create(pv)
+        except IntegrityError as e:
+            raise ValueError(f"PV addresses violate uniqueness constraints: {e}") from e
         return self._to_dto(pv)
 
     async def create_many(self, data_list: list[NewPVElementDTO]) -> list[PVElementDTO]:
         """Bulk create PVs."""
+        normalized_records: list[tuple[str | None, str | None, str | None, NewPVElementDTO]] = []
+        for data in data_list:
+            setpoint_address = self._normalize_address(data.setpointAddress)
+            readback_address = self._normalize_address(data.readbackAddress)
+            config_address = self._normalize_address(data.configAddress)
+            if not any([setpoint_address, readback_address, config_address]):
+                raise ValueError("At least one address (setpoint, readback, or config) is required")
+            normalized_records.append((setpoint_address, readback_address, config_address, data))
+
+        setpoints = [r[0] for r in normalized_records if r[0]]
+        seen = set()
+        duplicate_setpoints = set()
+        for s in setpoints:
+            if s in seen:
+                duplicate_setpoints.add(s)
+            else:
+                seen.add(s)
+        if duplicate_setpoints:
+            raise ValueError(f"Duplicate setpoint addresses in import: {sorted(duplicate_setpoints)[:10]}")
+
+        existing_setpoints = await self.pv_repo.get_existing_setpoints(setpoints)
+        if existing_setpoints:
+            raise ValueError(f"Setpoint addresses already exist: {sorted(existing_setpoints)[:10]}")
+
         # Collect all tag IDs
         all_tag_ids = set()
-        for data in data_list:
+        for _, _, _, data in normalized_records:
             all_tag_ids.update(data.tags)
 
         # Fetch all tags at once
@@ -105,12 +146,12 @@ class PVService:
 
         # Create PV objects
         pvs = []
-        for data in data_list:
+        for setpoint_address, readback_address, config_address, data in normalized_records:
             pv_tags = [tags_by_id[tid] for tid in data.tags if tid in tags_by_id]
             pv = PV(
-                setpoint_address=data.setpointAddress,
-                readback_address=data.readbackAddress,
-                config_address=data.configAddress,
+                setpoint_address=setpoint_address,
+                readback_address=readback_address,
+                config_address=config_address,
                 device=data.device,
                 description=data.description,
                 abs_tolerance=data.absTolerance,
@@ -121,7 +162,10 @@ class PVService:
             pvs.append(pv)
 
         # Bulk insert
-        pvs = await self.pv_repo.bulk_create(pvs)
+        try:
+            pvs = await self.pv_repo.bulk_create(pvs)
+        except IntegrityError as e:
+            raise ValueError(f"PV addresses violate uniqueness constraints: {e}") from e
         return [self._to_dto(pv) for pv in pvs]
 
     async def update(self, pv_id: str, data: UpdatePVElementDTO) -> PVElementDTO | None:

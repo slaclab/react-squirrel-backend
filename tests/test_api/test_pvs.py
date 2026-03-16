@@ -110,6 +110,40 @@ class TestPVBulkCreate:
         data = response.json()
         assert data["payload"] == []
 
+    @pytest.mark.asyncio
+    async def test_bulk_create_allows_blank_optional_addresses(self, client: AsyncClient):
+        """Blank optional addresses from CSV imports should be treated as NULL."""
+        pvs_data = [
+            {"setpointAddress": "CSV:PV:1", "readbackAddress": "", "configAddress": "", "device": "CSV-1"},
+            {"setpointAddress": "CSV:PV:2", "readbackAddress": "", "configAddress": "", "device": "CSV-2"},
+        ]
+
+        response = await client.post("/v1/pvs/multi", json=pvs_data)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["errorCode"] == 0
+        assert len(data["payload"]) == 2
+        assert data["payload"][0]["readbackAddress"] is None
+        assert data["payload"][0]["configAddress"] is None
+        assert data["payload"][1]["readbackAddress"] is None
+        assert data["payload"][1]["configAddress"] is None
+
+    @pytest.mark.asyncio
+    async def test_bulk_create_allows_duplicate_readback(self, client: AsyncClient):
+        """Readback addresses can repeat across different setpoints."""
+        pvs_data = [
+            {"setpointAddress": "CSV:PV:3", "readbackAddress": "DUP:RB:1", "device": "CSV-3"},
+            {"setpointAddress": "CSV:PV:4", "readbackAddress": "DUP:RB:1", "device": "CSV-4"},
+        ]
+
+        response = await client.post("/v1/pvs/multi", json=pvs_data)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["errorCode"] == 0
+        assert len(data["payload"]) == 2
+
 
 class TestPVSearch:
     """Tests for PV search endpoints."""
