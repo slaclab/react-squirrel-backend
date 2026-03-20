@@ -14,20 +14,12 @@ class Settings(BaseSettings):
     database_pool_size: int = 30
     database_max_overflow: int = 20
 
-    # EPICS configuration (simplified for aioca)
-    epics_ca_addr_list: str = ""
-    epics_ca_auto_addr_list: str = "YES"
-    epics_ca_server_port: str = "5068"
-    epics_ca_repeater_port: str = "5069"
+    # EPICS configuration
     epics_ca_conn_timeout: float = 5.0  # Connection timeout
     epics_ca_timeout: float = 10.0  # Read timeout (includes connection time for batch reads)
     epics_chunk_size: int = 1000  # Batch size for progress updates (smaller for better connection handling)
 
     # EPICS PVAccess configuration (p4p)
-    epics_pva_addr_list: str = ""
-    epics_pva_auto_addr_list: str = "YES"
-    epics_pva_server_port: str = ""
-    epics_pva_broadcast_port: str = ""
     epics_pva_timeout: float = 10.0  # Read timeout for PVAccess
     epics_unprefixed_pva_fallback: bool = False  # If True, unprefixed PVs try CA then PVA on failure
 

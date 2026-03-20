@@ -1,4 +1,3 @@
-import os
 import math
 import logging
 from typing import Any
@@ -12,15 +11,6 @@ from app.services.epics_types import EpicsValue
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-# Configure PVA environment before Context initialization
-if settings.epics_pva_addr_list:
-    os.environ["EPICS_PVA_ADDR_LIST"] = settings.epics_pva_addr_list
-os.environ["EPICS_PVA_AUTO_ADDR_LIST"] = settings.epics_pva_auto_addr_list
-if settings.epics_pva_server_port:
-    os.environ["EPICS_PVA_SERVER_PORT"] = settings.epics_pva_server_port
-if settings.epics_pva_broadcast_port:
-    os.environ["EPICS_PVA_BROADCAST_PORT"] = settings.epics_pva_broadcast_port
 
 
 class PVAccessService:
