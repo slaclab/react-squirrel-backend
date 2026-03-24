@@ -100,31 +100,57 @@ class TagService:
         await self.group_repo.delete(group)
         return True
 
-    async def add_tag_to_group(self, group_id: str, data: TagCreate) -> TagGroupDTO | None:
-        """Add a tag to a group."""
+    async def add_tag_to_group(
+        self, group_id: str, data: TagCreate, skip_duplicates: bool = False
+    ) -> tuple[TagGroupDTO | None, bool]:
+        """
+        Add a tag to a group.
+
+        Args:
+            group_id: The group ID to add the tag to
+            data: Tag creation data
+            skip_duplicates: If True, return success even if tag already exists
+
+        Returns:
+            Tuple of (group_dto, was_created)
+            - group_dto: The updated group, or None if group not found
+            - was_created: True if tag was created, False if it already existed
+        """
         group = await self.group_repo.get_with_tags(group_id)
         if not group:
-            return None
+            return None, False
 
         # Check for duplicate tag name in group
         existing = await self.tag_repo.find_by_group_and_name(group_id, data.name)
         if existing:
-            raise ValueError(f"Tag '{data.name}' already exists in this group")
+            if skip_duplicates:
+                # Return success but indicate tag already existed
+                group_dto = await self.get_group_by_id(group_id)
+                return group_dto, False
+            else:
+                # Raise error for strict validation (backward compatibility)
+                raise ValueError(f"Tag '{data.name}' already exists in this group")
 
         tag = Tag(name=data.name, description=data.description, group_id=group_id)
         await self.tag_repo.create(tag)
 
         # Expire cached group and refresh to get updated tags
         self.group_repo.session.expire(group)
-        group = await self.group_repo.get_with_tags(group_id)
+        updated_group = await self.group_repo.get_with_tags(group_id)
 
-        return TagGroupDTO(
-            id=group.id,
-            name=group.name,
-            description=group.description,
-            tags=[TagDTO(id=t.id, name=t.name, description=t.description) for t in group.tags],
-            createdDate=group.created_at,
-            lastModifiedDate=group.updated_at,
+        # Type narrowing: updated_group is guaranteed to exist since we just created a tag in it
+        assert updated_group is not None
+
+        return (
+            TagGroupDTO(
+                id=updated_group.id,
+                name=updated_group.name,
+                description=updated_group.description,
+                tags=[TagDTO(id=t.id, name=t.name, description=t.description) for t in updated_group.tags],
+                createdDate=updated_group.created_at,
+                lastModifiedDate=updated_group.updated_at,
+            ),
+            True,
         )
 
     async def update_tag(self, group_id: str, tag_id: str, data: TagUpdate) -> TagGroupDTO | None:

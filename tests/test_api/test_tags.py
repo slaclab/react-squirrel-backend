@@ -1,6 +1,7 @@
 """
 Tests for Tags API endpoints.
 """
+
 import pytest
 from httpx import AsyncClient
 
@@ -184,7 +185,7 @@ class TestTagOperations:
 
     @pytest.mark.asyncio
     async def test_add_duplicate_tag_fails(self, client: AsyncClient, sample_tag: tuple):
-        """Test that duplicate tag names within a group are rejected."""
+        """Test that duplicate tag names within a group are rejected by default."""
         group, tag = sample_tag
         group_id = group["id"]
 
@@ -193,6 +194,23 @@ class TestTagOperations:
         assert response.status_code == 409
         data = response.json()
         assert "already exists" in data["errorMessage"]
+
+    @pytest.mark.asyncio
+    async def test_add_duplicate_tag_with_skip_duplicates_succeeds(self, client: AsyncClient, sample_tag: tuple):
+        """Test that duplicate tag names succeed when skip_duplicates is true."""
+        group, tag = sample_tag
+        group_id = group["id"]
+
+        response = await client.post(
+            f"/v1/tags/{group_id}/tags?skip_duplicates=true",
+            json={"name": tag["name"]},  # Duplicate name
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["errorCode"] == 0
+        assert data["payload"]["wasCreated"] is False  # Tag already existed
+        assert data["payload"]["group"]["id"] == group_id
 
     @pytest.mark.asyncio
     async def test_add_tag_to_nonexistent_group(self, client: AsyncClient):
@@ -249,3 +267,85 @@ class TestTagOperations:
         response = await client.delete(f"/v1/tags/{group_id}/tags/nonexistent-tag")
 
         assert response.status_code == 404
+
+
+class TestBulkTagImport:
+    """Tests for bulk tag import endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_bulk_import_tags_creates_new_groups_and_tags(self, client: AsyncClient):
+        """Test bulk import creates new groups and tags."""
+        response = await client.post(
+            "/v1/tags/bulk",
+            json={
+                "groups": {
+                    "Location": ["Building-A", "Building-B", "Building-C"],
+                    "System": ["System-1", "System-2"],
+                }
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["errorCode"] == 0
+        assert data["payload"]["groupsCreated"] == 2
+        assert data["payload"]["tagsCreated"] == 5
+        assert data["payload"]["tagsSkipped"] == 0
+        assert len(data["payload"]["warnings"]) == 0
+
+    @pytest.mark.asyncio
+    async def test_bulk_import_tags_skips_duplicates(self, client: AsyncClient, sample_tag: tuple):
+        """Test bulk import skips duplicate tags."""
+        group, tag = sample_tag
+        group_name = group["name"]
+
+        response = await client.post(
+            "/v1/tags/bulk",
+            json={
+                "groups": {
+                    group_name: [tag["name"], "New-Tag-1", "New-Tag-2"],
+                }
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["errorCode"] == 0
+        assert data["payload"]["groupsCreated"] == 0  # Group already exists
+        assert data["payload"]["tagsCreated"] == 2  # Only new tags created
+        assert data["payload"]["tagsSkipped"] == 1  # Duplicate tag skipped
+        assert len(data["payload"]["warnings"]) == 1
+        assert "already exists" in data["payload"]["warnings"][0]
+
+    @pytest.mark.asyncio
+    async def test_bulk_import_tags_with_existing_group(self, client: AsyncClient, sample_tag_group: dict):
+        """Test bulk import adds tags to existing group."""
+        group_name = sample_tag_group["name"]
+
+        response = await client.post(
+            "/v1/tags/bulk",
+            json={
+                "groups": {
+                    group_name: ["New-Tag-A", "New-Tag-B"],
+                }
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["errorCode"] == 0
+        assert data["payload"]["groupsCreated"] == 0  # Group already exists
+        assert data["payload"]["tagsCreated"] == 2
+        assert data["payload"]["tagsSkipped"] == 0
+
+    @pytest.mark.asyncio
+    async def test_bulk_import_tags_empty_groups(self, client: AsyncClient):
+        """Test bulk import with empty groups dict."""
+        response = await client.post("/v1/tags/bulk", json={"groups": {}})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["errorCode"] == 0
+        assert data["payload"]["groupsCreated"] == 0
+        assert data["payload"]["tagsCreated"] == 0
+        assert data["payload"]["tagsSkipped"] == 0
