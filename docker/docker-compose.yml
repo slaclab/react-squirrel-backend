@@ -74,7 +74,6 @@ services:
     container_name: squirrel-monitor
     command: python -m app.monitor_main
     environment:
-      # With network_mode: host, talk to db/redis via localhost (not service DNS)
       SQUIRREL_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       SQUIRREL_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       SQUIRREL_DEBUG: "${SQUIRREL_DEBUG}"
