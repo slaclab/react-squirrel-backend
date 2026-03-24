@@ -9,7 +9,7 @@ Get the backend running in 2 minutes!
 
 ## Option 1: Docker Compose (Fastest)
 
-### 1. Configure EPICS DNS (Docker Desktop on macOS/Windows only)
+### 1. Configure EPICS Networking
 
 If you need to connect to EPICS servers:
 
@@ -17,11 +17,15 @@ If you need to connect to EPICS servers:
 # Copy the example environment file
 cp docker/.env.example docker/.env
 
-# Edit docker/.env with your EPICS server IPs
-# Get IPs with: host <hostname>
+# The example .env file has EPICS_CA_AUTO_ADDR_LIST set to YES by default.
+# This should be sufficient to find any test PVs you are running locally without any modifications.
+#
+# If you need to point to specific IP addresses to locate PVs, uncomment EPICS_CA_ADDR_LIST or
+# EPICS_PVA_ADDR_LIST as needed and specify the IP address needed.
+#
+# If pointing to a hostname, ensure that a DNS entry is created for it by specifying either EPICS_HOST_PROD 
+# or EPICS_HOST_DMZ
 ```
-
-**Linux users**: Skip this step and uncomment `network_mode: host` in `docker-compose.yml` instead.
 
 ### 2. Start everything
 

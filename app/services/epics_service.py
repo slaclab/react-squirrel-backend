@@ -1,4 +1,3 @@
-import os
 import math
 import logging
 from typing import Any
@@ -14,12 +13,6 @@ from app.services.pvaccess_service import get_pvaccess_service
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-# Set EPICS environment BEFORE aioca import (in practice, set in __init__.py or app startup)
-# These must be set before libca is loaded
-if settings.epics_ca_addr_list:
-    os.environ["EPICS_CA_ADDR_LIST"] = settings.epics_ca_addr_list
-os.environ["EPICS_CA_AUTO_ADDR_LIST"] = settings.epics_ca_auto_addr_list
 
 
 class EpicsService:

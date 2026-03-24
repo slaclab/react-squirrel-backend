@@ -45,6 +45,11 @@ cd react-squirrel-backend
 
 # Start the full stack
 cd docker
+cp .env.example .env
+# Note: If needing to make EPICS connections outside of your machine's localhost, edit
+# the .env file to add the IP addresses or host names to EPICS_CA_ADDR_LIST/EPICS_PVA_ADDR_LIST
+# as necessary. For example:
+# EPICS_CA_ADDR_LIST=lcls-prod01:5068 lcls-prod01:5063
 docker-compose up -d --build
 
 # Configure the database
@@ -82,6 +87,7 @@ For simpler deployments with embedded PV monitoring:
 
 ```bash
 cd docker
+cp .env.example .env
 docker compose --profile legacy up backend db redis
 ```
 
@@ -372,7 +378,6 @@ All configuration is via environment variables (with `SQUIRREL_` prefix):
 | `SQUIRREL_DATABASE_URL` | `postgresql+asyncpg://...` | Database connection |
 | `SQUIRREL_DATABASE_POOL_SIZE` | `30` | Connection pool size |
 | `SQUIRREL_REDIS_URL` | `redis://localhost:6379/0` | Redis connection |
-| `SQUIRREL_EPICS_CA_ADDR_LIST` | (empty) | EPICS CA address list |
 | `SQUIRREL_EPICS_CA_TIMEOUT` | `10.0` | Operation timeout (seconds) |
 | `SQUIRREL_EPICS_CHUNK_SIZE` | `1000` | PVs per batch in parallel ops |
 | `SQUIRREL_PV_MONITOR_BATCH_SIZE` | `500` | PVs per subscription batch |
@@ -384,7 +389,7 @@ See `.env.example` for a complete template.
 
 ### Docker-Specific Configuration
 
-For Docker Desktop on macOS/Windows, configure EPICS server DNS mappings:
+If needing to create EPICS connections to specific host names, configure EPICS server DNS mappings:
 
 ```bash
 # Copy the example file
