@@ -46,6 +46,10 @@ cd react-squirrel-backend
 # Start the full stack
 cd docker
 cp .env.example .env
+# Note: If needing to make EPICS connections outside of your machine's localhost, edit
+# the .env file to add the IP addresses or host names to EPICS_CA_ADDR_LIST/EPICS_PVA_ADDR_LIST
+# as necessary. For example:
+# EPICS_CA_ADDR_LIST=lcls-prod01:5068 lcls-prod01:5063
 docker-compose up -d --build
 
 # Configure the database
