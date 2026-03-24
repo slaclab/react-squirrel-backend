@@ -6,7 +6,7 @@ from app.db.session import async_session_maker
 from app.services.api_key_service import ApiKeyService
 
 
-async def main(id: str | None = None):
+async def main(id: str):
     try:
         async with async_session_maker() as session:
             api_key_service = ApiKeyService(session)
