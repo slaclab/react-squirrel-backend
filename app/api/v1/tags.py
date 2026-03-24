@@ -1,8 +1,8 @@
 from uuid import UUID
 
 from fastapi import Query, Depends, APIRouter
-from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.schemas.tag import TagCreate, TagUpdate, TagGroupCreate, TagGroupUpdate
