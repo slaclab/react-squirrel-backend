@@ -1,9 +1,16 @@
 import asyncio
 from argparse import ArgumentParser
+from datetime import datetime
 
 from app.db.session import async_session_maker
 from app.schemas.api_key import ApiKeyDTO
 from app.services.api_key_service import ApiKeyService
+
+
+def _fmt(value) -> str:
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S.%f")[:-4]
+    return str(value)
 
 
 def print_table(models: list[ApiKeyDTO]) -> None:
@@ -12,7 +19,7 @@ def print_table(models: list[ApiKeyDTO]) -> None:
         return
 
     headers = list(type(models[0]).model_fields.keys())
-    rows = [[str(getattr(m, h)) for h in headers] for m in models]
+    rows = [[_fmt(getattr(m, h)) for h in headers] for m in models]
 
     widths = [max(len(h), *(len(r[i]) for r in rows)) for i, h in enumerate(headers)]
 
