@@ -37,13 +37,11 @@ async def export_database_csv(db: AsyncSession = Depends(get_db)):
         "Abs Tolerance",
         "Rel Tolerance",
         "Read Only",
-        "Tags",
     ]
     pv_writer.writerow(pv_headers)
 
     # Write PV data into rows for the CSV
     for pv in pvs_result.results:
-        tag_names = [tag.name for tag in pv.tags]
         row = [
             pv.id,
             pv.setpointAddress,
@@ -54,7 +52,6 @@ async def export_database_csv(db: AsyncSession = Depends(get_db)):
             pv.absTolerance,
             pv.relTolerance,
             pv.readOnly,
-            "; ".join(tag_names),
         ]
         pv_writer.writerow(row)
 
