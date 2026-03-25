@@ -24,7 +24,9 @@ def error_response(code: int, message: str, status_code: int = 400) -> JSONRespo
 class APIException(HTTPException):
     """Custom API exception with error codes."""
 
-    def __init__(self, code: int, message: str, status_code: int = 400):
+    def __init__(self, error_code: int, message: str, status_code: int | None = None):
+        if status_code is None:
+            status_code = error_code
         super().__init__(status_code=status_code, detail=message)
-        self.error_code = code
+        self.error_code = error_code
         self.error_message = message
