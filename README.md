@@ -528,6 +528,46 @@ uvicorn app.main:app --reload --port 8001
 
 ---
 
+## API Key Management
+
+These scripts manage API keys for authenticating requests to the backend. Run them from the project root with `python -m scripts.<script_name>`.
+
+### Create a key
+
+```bash
+python -m scripts.create_key <app_name> [--read] [--write]
+```
+
+At least one of `--read` / `--write` is required.
+
+```bash
+# Read-only key for the frontend app
+python -m scripts.create_key my-app --read
+
+# Read/write key
+python -m scripts.create_key my-app --read --write
+```
+
+Output includes the app name, key ID, access level, creation timestamp, and the token (only shown at creation time).
+
+### List keys
+
+```bash
+python -m scripts.list_keys [--active-only]
+```
+
+Prints a table of all stored API keys. Use `--active-only` (`-a`) to filter out deactivated keys.
+
+### Deactivate a key
+
+```bash
+python -m scripts.deactivate_key <id>
+```
+
+Deactivates the key with the given ID. The key is retained in the database but can no longer be used for authentication.
+
+---
+
 ## Performance Benchmarking
 
 ```bash

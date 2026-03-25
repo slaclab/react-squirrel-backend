@@ -166,6 +166,37 @@ Performance testing:
 python -m scripts.benchmark --iterations 5
 ```
 
+### create_key.py
+
+Create a new API key. At least one of `--read` / `--write` is required:
+
+```bash
+python -m scripts.create_key <app_name> --read
+python -m scripts.create_key <app_name> --read --write
+```
+
+Output includes the app name, key ID, access level, creation timestamp, and the token. The token is only shown at creation time — store it securely.
+
+### list_keys.py
+
+List all API keys as a formatted table:
+
+```bash
+# All keys
+python -m scripts.list_keys
+
+# Active keys only
+python -m scripts.list_keys --active-only
+```
+
+### deactivate_key.py
+
+Deactivate an existing key by its ID. The key is retained in the database but can no longer authenticate requests:
+
+```bash
+python -m scripts.deactivate_key <id>
+```
+
 ## IDE Setup
 
 ### VS Code
