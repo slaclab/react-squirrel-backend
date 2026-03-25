@@ -9,10 +9,15 @@ Provides health monitoring endpoints for:
 
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import Security, APIRouter, HTTPException
 
+from app.dependencies import require_read_access, require_write_access
 from app.api.responses import success_response
+from app.schemas.health import (
+    HealthSummaryResponse,
+    MonitorHealthResponse,
+    WatchdogStatsResponse,
+)
 from app.services.watchdog import get_watchdog
 from app.services.pv_monitor import get_pv_monitor
 from app.services.redis_service import get_redis_service
@@ -20,69 +25,8 @@ from app.services.redis_service import get_redis_service
 router = APIRouter(prefix="/health", tags=["Health"])
 
 
-# ============================================================
-# Response Models
-# ============================================================
-
-
-class HeartbeatResponse(BaseModel):
-    """Simple heartbeat response for frontend polling."""
-
-    timestamp: float | None
-    alive: bool
-
-
-class MonitorHealthResponse(BaseModel):
-    """Comprehensive monitor health response."""
-
-    alive: bool
-    last_heartbeat: datetime | None
-    heartbeat_age_seconds: float | None
-    total_cached_pvs: int
-    connected_pvs: int
-    disconnected_pvs: int
-    monitored_pvs: int
-    active_subscriptions: int
-    monitor_running: bool
-    watchdog_running: bool
-    watchdog_last_check: datetime | None
-
-
-class WatchdogStatsResponse(BaseModel):
-    """Watchdog statistics response."""
-
-    last_check: datetime | None
-    check_count: int
-    disconnected_count: int
-    stale_count: int
-    reconnect_attempts: int
-    successful_reconnects: int
-    failed_reconnects: int
-    last_errors: list[str]
-
-
-class HealthSummaryResponse(BaseModel):
-    """Complete health summary for dashboard."""
-
-    status: str  # "healthy", "degraded", "unhealthy"
-    monitor_alive: bool
-    heartbeat_age_seconds: float | None
-    total_pvs: int
-    connected_pvs: int
-    disconnected_pvs: int
-    disconnected_percentage: float
-    watchdog_running: bool
-    last_watchdog_check: datetime | None
-    issues: list[str]
-
-
-# ============================================================
-# Endpoints
-# ============================================================
-
-
-@router.get("/heartbeat", response_model=dict)
-async def get_heartbeat():
+@router.get("/heartbeat")
+async def get_heartbeat() -> dict:
     """
     Simple heartbeat check for frontend polling.
 
@@ -127,8 +71,8 @@ async def get_heartbeat():
         )
 
 
-@router.get("/monitor", response_model=MonitorHealthResponse)
-async def get_monitor_health():
+@router.get("/monitor", dependencies=[Security(require_read_access)])
+async def get_monitor_health() -> MonitorHealthResponse:
     """
     Get detailed monitor health information.
 
@@ -168,8 +112,8 @@ async def get_monitor_health():
         raise HTTPException(status_code=503, detail=f"Health check failed: {e}")
 
 
-@router.get("/watchdog", response_model=WatchdogStatsResponse)
-async def get_watchdog_stats():
+@router.get("/watchdog", dependencies=[Security(require_read_access)])
+async def get_watchdog_stats() -> WatchdogStatsResponse:
     """
     Get watchdog statistics.
 
@@ -194,8 +138,8 @@ async def get_watchdog_stats():
         raise HTTPException(status_code=503, detail=f"Watchdog stats failed: {e}")
 
 
-@router.post("/watchdog/check", response_model=WatchdogStatsResponse)
-async def force_watchdog_check():
+@router.post("/watchdog/check", dependencies=[Security(require_write_access)])
+async def force_watchdog_check() -> WatchdogStatsResponse:
     """
     Force an immediate watchdog health check.
 
@@ -221,8 +165,8 @@ async def force_watchdog_check():
         raise HTTPException(status_code=503, detail=f"Watchdog check failed: {e}")
 
 
-@router.get("/summary", response_model=HealthSummaryResponse)
-async def get_health_summary():
+@router.get("/summary", dependencies=[Security(require_read_access)])
+async def get_health_summary() -> HealthSummaryResponse:
     """
     Get a complete health summary for monitoring dashboards.
 
@@ -308,8 +252,8 @@ async def get_health_summary():
         )
 
 
-@router.get("/disconnected", response_model=dict)
-async def get_disconnected_pvs():
+@router.get("/disconnected", dependencies=[Security(require_read_access)])
+async def get_disconnected_pvs() -> dict:
     """
     Get list of all disconnected PVs.
 
@@ -328,8 +272,8 @@ async def get_disconnected_pvs():
         raise HTTPException(status_code=503, detail=f"Failed to get disconnected PVs: {e}")
 
 
-@router.get("/stale", response_model=dict)
-async def get_stale_pvs(max_age_seconds: float = 300):
+@router.get("/stale", dependencies=[Security(require_read_access)])
+async def get_stale_pvs(max_age_seconds: float = 300) -> dict:
     """
     Get list of stale PVs (connected but not updated recently).
 
@@ -350,8 +294,8 @@ async def get_stale_pvs(max_age_seconds: float = 300):
         raise HTTPException(status_code=503, detail=f"Failed to get stale PVs: {e}")
 
 
-@router.get("/circuits", response_model=dict)
-async def get_circuit_breaker_status():
+@router.get("/circuits", dependencies=[Security(require_read_access)])
+async def get_circuit_breaker_status() -> dict:
     """
     Get circuit breaker status for all EPICS IOCs.
 
@@ -405,8 +349,8 @@ async def get_circuit_breaker_status():
         }
 
 
-@router.post("/circuits/{circuit_name}/close", response_model=dict)
-async def force_close_circuit(circuit_name: str):
+@router.post("/circuits/{circuit_name}/close", dependencies=[Security(require_write_access)])
+async def force_close_circuit(circuit_name: str) -> dict:
     """
     Force close a circuit breaker (allow requests to IOC).
 
@@ -423,8 +367,8 @@ async def force_close_circuit(circuit_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/circuits/{circuit_name}/open", response_model=dict)
-async def force_open_circuit(circuit_name: str):
+@router.post("/circuits/{circuit_name}/open", dependencies=[Security(require_write_access)])
+async def force_open_circuit(circuit_name: str) -> dict:
     """
     Force open a circuit breaker (block requests to IOC).
 
@@ -441,8 +385,8 @@ async def force_open_circuit(circuit_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/monitor/status", response_model=dict)
-async def monitor_process_status():
+@router.get("/monitor/status", dependencies=[Security(require_read_access)])
+async def monitor_process_status() -> dict:
     """
     Check if the separate PV Monitor process is alive via Redis heartbeat.
 
