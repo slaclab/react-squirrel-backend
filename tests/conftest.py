@@ -8,10 +8,12 @@ from collections.abc import Generator, AsyncGenerator
 
 import pytest
 import pytest_asyncio
+import fakeredis.aioredis as aioredis_fake
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+import app.services.redis_service as redis_module
 from app.main import app
 from app.models import Base
 from app.db.session import get_db
@@ -36,6 +38,18 @@ def event_loop() -> Generator:
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
+
+
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def fake_redis():
+    """Inject a fake Redis instance into the RedisService singleton for all tests."""
+    fake = aioredis_fake.FakeRedis(decode_responses=True)
+    redis_module._redis_service = None
+    service = redis_module.get_redis_service()
+    service._redis = fake
+    yield service
+    await fake.aclose()
+    redis_module._redis_service = None
 
 
 @pytest_asyncio.fixture(scope="function")
