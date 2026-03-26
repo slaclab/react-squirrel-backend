@@ -22,6 +22,28 @@ class PVRepository(BaseRepository[PV]):
         )
         return result.scalar_one_or_none()
 
+    async def find_by_setpoint(self, setpoint_address: str) -> PV | None:
+        """Find PV by setpoint address only."""
+        result = await self.session.execute(
+            select(PV)
+            .options(selectinload(PV.tags).selectinload(Tag.group))
+            .where(PV.setpoint_address == setpoint_address)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_existing_setpoints(self, setpoint_addresses: list[str]) -> set[str]:
+        """Return set of setpoint addresses that already exist."""
+        if not setpoint_addresses:
+            return set()
+        # PostgreSQL limit is 32767 parameters, use a safe batch size.
+        batch_size = 30000
+        existing: set[str] = set()
+        for i in range(0, len(setpoint_addresses), batch_size):
+            batch = setpoint_addresses[i : i + batch_size]
+            result = await self.session.execute(select(PV.setpoint_address).where(PV.setpoint_address.in_(batch)))
+            existing.update({row[0] for row in result.all() if row[0]})
+        return existing
+
     async def search_by_name(
         self,
         search: str | None = None,
