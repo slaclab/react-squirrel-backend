@@ -31,8 +31,8 @@ _p4p_logger.handlers = [logging.NullHandler()]
 
 # Test database URL - uses a separate test database
 TEST_DATABASE_URL = "postgresql+asyncpg://squirrel:squirrel@localhost:5432/squirrel_test"
-# Admin DSN used to create squirrel_test if it doesn't exist (asyncpg, not SQLAlchemy)
-_ADMIN_DSN = "postgresql://squirrel:squirrel@localhost:5432/squirrel"
+# Admin DSN used to create squirrel_test if it doesn't exist; uses the built-in `postgres` database
+_ADMIN_DSN = "postgresql://squirrel:squirrel@localhost:5432/postgres"
 
 
 @pytest.fixture(scope="session")
@@ -46,10 +46,13 @@ def event_loop() -> Generator:
 @pytest_asyncio.fixture(scope="session")
 async def ensure_test_db():
     """Create the squirrel_test database if it doesn't already exist."""
-    async with await asyncpg.connect(_ADMIN_DSN) as conn:
+    conn = await asyncpg.connect(_ADMIN_DSN)
+    try:
         exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = 'squirrel_test'")
         if not exists:
             await conn.execute("CREATE DATABASE squirrel_test")
+    finally:
+        await conn.close()
 
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
