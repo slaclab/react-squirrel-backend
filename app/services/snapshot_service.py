@@ -522,7 +522,12 @@ class SnapshotService:
             logger.exception(f"Error creating snapshot from cache '{data.title}': {e}")
             raise
 
-    async def restore_snapshot(self, snapshot_id: str, request: RestoreRequestDTO | None = None) -> RestoreResultDTO:
+    async def restore_snapshot(
+        self,
+        snapshot_id: str,
+        request: RestoreRequestDTO | None = None,
+        progress_callback: Callable | None = None,
+    ) -> RestoreResultDTO:
         """
         Restore PV values from a snapshot to EPICS.
 
@@ -560,10 +565,18 @@ class SnapshotService:
                     values_to_write[pv.setpoint_address] = write_value
                     pv_id_by_address[pv.setpoint_address] = pv.id
 
-        logger.info(f"Writing {len(values_to_write)} PV values")
+        total_pvs = len(values_to_write)
+        logger.info(f"Writing {total_pvs} PV values")
+
+        # Initial progress update
+        if progress_callback:
+            await progress_callback(0, total_pvs, f"Starting restore of {total_pvs:,} PVs")
 
         # Write to EPICS in parallel
-        results = await self.epics.put_many(values_to_write)
+        if progress_callback:
+            results = await self.epics.put_many_with_progress(values_to_write, progress_callback)
+        else:
+            results = await self.epics.put_many(values_to_write)
 
         # Process results
         failures = []
@@ -576,6 +589,12 @@ class SnapshotService:
                 pv_id = pv_id_by_address.get(address, "")
                 failures.append({"pvId": pv_id, "pvName": address, "error": error or "Unknown error"})
 
+        if progress_callback:
+            await progress_callback(
+                total_pvs,
+                total_pvs,
+                f"Completed restore: {success_count}/{total_pvs} PVs successful",
+            )
         total_time = datetime.now()
         logger.info(
             f"Restore completed in {(total_time - start_time).total_seconds():.2f}s "
@@ -583,7 +602,7 @@ class SnapshotService:
         )
 
         return RestoreResultDTO(
-            totalPVs=len(values_to_write), successCount=success_count, failureCount=len(failures), failures=failures
+            totalPVs=total_pvs, successCount=success_count, failureCount=len(failures), failures=failures
         )
 
     async def compare_snapshots(self, snapshot1_id: str, snapshot2_id: str) -> ComparisonResultDTO:
