@@ -7,6 +7,7 @@ from datetime import datetime
 from collections.abc import Generator, AsyncGenerator
 
 import pytest
+import asyncpg
 import pytest_asyncio
 import fakeredis.aioredis as aioredis_fake
 from httpx import AsyncClient, ASGITransport
@@ -30,6 +31,8 @@ _p4p_logger.handlers = [logging.NullHandler()]
 
 # Test database URL - uses a separate test database
 TEST_DATABASE_URL = "postgresql+asyncpg://squirrel:squirrel@localhost:5432/squirrel_test"
+# Admin DSN used to create squirrel_test if it doesn't exist; uses the built-in `postgres` database
+_ADMIN_DSN = "postgresql://squirrel:squirrel@localhost:5432/postgres"
 
 
 @pytest.fixture(scope="session")
@@ -38,6 +41,18 @@ def event_loop() -> Generator:
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def ensure_test_db():
+    """Create the squirrel_test database if it doesn't already exist."""
+    conn = await asyncpg.connect(_ADMIN_DSN)
+    try:
+        exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = 'squirrel_test'")
+        if not exists:
+            await conn.execute("CREATE DATABASE squirrel_test")
+    finally:
+        await conn.close()
 
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
@@ -53,7 +68,7 @@ async def fake_redis():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def test_engine():
+async def test_engine(ensure_test_db):
     """Create test database engine and tables."""
     engine = create_async_engine(
         TEST_DATABASE_URL, echo=False, poolclass=NullPool  # Disable connection pooling for tests
