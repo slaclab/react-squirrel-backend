@@ -10,12 +10,11 @@ RUN apt-get update && apt-get install -y \
     make \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY pyproject.toml .
-RUN pip install --no-cache-dir .
-
 # Copy application
 COPY . .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -e .
 
 # Run with hot reload
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
