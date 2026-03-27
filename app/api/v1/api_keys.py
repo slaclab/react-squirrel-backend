@@ -45,24 +45,6 @@ async def deactivate_api_key(key_id: str, db: AsyncSession = Depends(get_db)) ->
     return ApiResultResponse(errorCode=0, errorMessage=None, payload=deactivated_key)
 
 
-@router.post("/bootstrap")
-async def bootstrap_api_key(db: AsyncSession = Depends(get_db)) -> ApiResultResponse:
-    """Bootstrap an API Key for initial setup."""
-    service = ApiKeyService(db)
-
-    existing_count = await service.get_count(active_only=True)
-    if existing_count > 0:
-        raise APIException(
-            status.HTTP_403_FORBIDDEN,
-            "API Key already exists. Bootstrapping is only allowed when no keys exist.",
-            status_code=status.HTTP_403_FORBIDDEN,
-        )
-
-    data = ApiKeyCreateDTO(appName="Initial Bootstrap Key", readAccess=True, writeAccess=True)
-    new_key = await service.create_key(data)
-    return ApiResultResponse(errorCode=0, errorMessage=None, payload=new_key)
-
-
 @router.get("/count", dependencies=[Depends(require_read_access)])
 async def get_api_key_count(active_only: bool = False, db: AsyncSession = Depends(get_db)) -> ApiResultResponse:
     """Get the current number of API Keys."""

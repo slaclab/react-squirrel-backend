@@ -41,6 +41,8 @@ class ApiKeyService:
         existing_key = await self.repo.get_by_app_name(data.appName)
         if existing_key:
             raise ValueError(f"An API Key with appName '{data.appName}' already exists.")
+        if not (data.readAccess or data.writeAccess):
+            raise ValueError("Cannot create an API Key with no access.")
 
         plaintext_token = "sq_" + secrets.token_urlsafe(32)
         api_key = ApiKey(
