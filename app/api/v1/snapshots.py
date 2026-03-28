@@ -11,7 +11,7 @@ from app.db.session import get_db
 from app.models.job import JobType
 from app.schemas.job import JobCreatedDTO
 from app.dependencies import require_read_access, require_write_access
-from app.api.responses import APIException, success_response
+from app.api.responses import APIException, error_response, success_response
 from app.schemas.snapshot import NewSnapshotDTO, RestoreRequestDTO, UpdateSnapshotDTO
 from app.services.job_service import JobService
 from app.services.epics_service import EpicsService, get_epics_service
@@ -190,6 +190,7 @@ async def restore_snapshot(
     snapshot_id: str,
     request: RestoreRequestDTO | None = None,
     db: AsyncSession = Depends(get_db),
+    async_mode: bool = Query(True, alias="async"),
     epics: EpicsService = Depends(get_epics_service),
 ) -> dict:
     """
@@ -207,6 +208,34 @@ async def restore_snapshot(
     snapshot = await service.get_by_id(snapshot_id)
     if not snapshot:
         raise APIException(404, f"Snapshot {snapshot_id} not found", 404)
+
+    if async_mode:
+        job_service = JobService(db)
+        job = await job_service.create_job(
+            JobType.SNAPSHOT_RESTORE,
+            job_data={"snapshotId": snapshot_id},
+        )
+
+        await db.commit()
+        pool = await get_arq_pool()
+        if pool:
+            try:
+                await pool.enqueue_job(
+                    "restore_snapshot_task",
+                    job_id=str(job.id),
+                    snapshot_id=snapshot_id,
+                    pv_ids=request.pvIds if request else None,
+                )
+                logger.info(f"Enqueued restore job to Arq: {job.id}")
+
+                return success_response(
+                    JobCreatedDTO(
+                        jobId=job.id,
+                        message=f"Snapshot restore queued ({snapshot_id})",
+                    )
+                )
+            except Exception as e:
+                return error_response(500, f"Failed to enqueue to Arq: {e}")
 
     result = await service.restore_snapshot(snapshot_id, request)
     return success_response(result)

@@ -471,6 +471,54 @@ class EpicsService:
 
         return results
 
+    async def put_many_with_progress(
+        self,
+        values: dict[str, Any],
+        progress_callback: Callable | None = None,
+    ) -> dict[str, tuple[bool, str | None]]:
+        """
+        Put values to multiple PVs with progress tracking.
+        Can be used to update the user on progress when a snapshot restore is initiated.
+        """
+        total_pvs = len(values)
+        results: dict[str, tuple[bool, str | None]] = {}
+
+        logger.info(f"Starting put_many_with_progress for {total_pvs} PVs")
+
+        if progress_callback:
+            await progress_callback(0, total_pvs, f"Starting restore of {total_pvs:,} PVs")
+
+        items = list(values.items())
+        batch_size = self._chunk_size
+
+        for i in range(0, total_pvs, batch_size):
+            batch_items = items[i : i + batch_size]
+            batch_values = dict(batch_items)
+
+            try:
+                batch_results = await self.put_many(batch_values)
+                results.update(batch_results)
+            except Exception as e:
+                logger.error(f"Chunk put error ({i}-{i + len(batch_items)}): {e}")
+                for pv_name, _ in batch_items:
+                    if pv_name not in results:
+                        results[pv_name] = (False, str(e))
+
+            current = min(i + batch_size, total_pvs)
+            success_count = sum(1 for ok, _ in results.values() if ok)
+
+            if progress_callback:
+                await progress_callback(
+                    current,
+                    total_pvs,
+                    f"Restored {current:,}/{total_pvs:,} PVs ({success_count:,} successful)",
+                )
+
+            logger.info(f"Restored {current:,}/{total_pvs:,} PVs " f"({success_count:,} successful)")
+
+        logger.info(f"Completed put_many_with_progress: {len(results)}/{total_pvs} PVs processed")
+        return results
+
     async def shutdown(self):
         """Cleanup resources."""
         # aioca manages its own connections via libca
