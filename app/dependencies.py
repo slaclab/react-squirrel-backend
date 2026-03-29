@@ -45,18 +45,19 @@ def get_tag_service(db: AsyncSession = Depends(get_db)) -> TagService:
 
 
 async def get_api_key(
-    db: Annotated[AsyncSession, Depends(get_db)], api_key_header: Annotated[str, Security(api_key_header)]
-) -> ApiKeyDTO | None:
-    if api_key_header:
+    db: Annotated[AsyncSession, Depends(get_db)], 
+    api_key_value: Annotated[str | None, Security(api_key_header)]
+) -> ApiKeyDTO:
+    if api_key_value:
         service = ApiKeyService(db)
-        api_key_dto = await service.get_by_token(api_key_header)
+        api_key_dto = await service.get_by_token(api_key_value)
 
         if api_key_dto and api_key_dto.isActive:
             return api_key_dto
 
     raise APIException(
-        error_code=status.HTTP_401_UNAUTHORIZED,
-        message="Missing or deactivated API key",
+        status.HTTP_401_UNAUTHORIZED,
+        "Missing or deactivated API key",
         status_code=status.HTTP_401_UNAUTHORIZED,
     )
 
@@ -65,8 +66,8 @@ def require_read_access(api_key_dto: Annotated[ApiKeyDTO, Security(get_api_key)]
     """Dependency that requires a valid, active API Key with read access."""
     if not api_key_dto.readAccess:
         raise APIException(
-            error_code=status.HTTP_401_UNAUTHORIZED,
-            message="API key does not have read access",
+            status.HTTP_401_UNAUTHORIZED,
+            "API key does not have read access",
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
 
@@ -75,8 +76,8 @@ def require_write_access(api_key_dto: Annotated[ApiKeyDTO, Security(get_api_key)
     """Dependency that requires a valid, active API Key with write access."""
     if not api_key_dto.writeAccess:
         raise APIException(
-            error_code=status.HTTP_401_UNAUTHORIZED,
-            message="API key does not have write access",
+            status.HTTP_401_UNAUTHORIZED,
+            "API key does not have write access",
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
 
@@ -86,7 +87,10 @@ def require_write_access(api_key_dto: Annotated[ApiKeyDTO, Security(get_api_key)
 # ---------------------------------------------------------------------------
 
 
-async def ws_get_api_key(websocket: WebSocket, db: AsyncSession = Security(get_db)) -> ApiKeyDTO:
+async def ws_get_api_key(
+    websocket: WebSocket, 
+    db: Annotated[AsyncSession, Depends(get_db)]
+) -> ApiKeyDTO:
     """WebSocket variant of get_api_key — raises WebSocketException on failure."""
     key_value = websocket.headers.get("X-API-Key")
     if key_value:
