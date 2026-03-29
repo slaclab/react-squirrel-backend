@@ -45,11 +45,12 @@ def get_tag_service(db: AsyncSession = Depends(get_db)) -> TagService:
 
 
 async def get_api_key(
-    db: Annotated[AsyncSession, Depends(get_db)], api_key_header: Annotated[str, Security(api_key_header)]
-) -> ApiKeyDTO | None:
-    if api_key_header:
+    db: Annotated[AsyncSession, Depends(get_db)], 
+    api_key_value: Annotated[str | None, Security(api_key_header)]
+) -> ApiKeyDTO:
+    if api_key_value:
         service = ApiKeyService(db)
-        api_key_dto = await service.get_by_token(api_key_header)
+        api_key_dto = await service.get_by_token(api_key_value)
 
         if api_key_dto and api_key_dto.isActive:
             return api_key_dto
@@ -86,7 +87,10 @@ def require_write_access(api_key_dto: Annotated[ApiKeyDTO, Security(get_api_key)
 # ---------------------------------------------------------------------------
 
 
-async def ws_get_api_key(websocket: WebSocket, db: AsyncSession = Security(get_db)) -> ApiKeyDTO:
+async def ws_get_api_key(
+    websocket: WebSocket, 
+    db: Annotated[AsyncSession, Depends(get_db)]
+) -> ApiKeyDTO:
     """WebSocket variant of get_api_key — raises WebSocketException on failure."""
     key_value = websocket.headers.get("X-API-Key")
     if key_value:
