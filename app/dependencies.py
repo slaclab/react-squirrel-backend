@@ -13,6 +13,7 @@ from app.services.tag_service import TagService
 from app.services.epics_service import EpicsService, get_epics_service
 from app.services.api_key_service import ApiKeyService
 from app.services.snapshot_service import SnapshotService
+from app.services.redis_service import RedisService, get_redis_service
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -28,10 +29,12 @@ def get_pv_service(db: AsyncSession = Depends(get_db)) -> PVService:
 
 
 def get_snapshot_service(
-    db: AsyncSession = Depends(get_db), epics: EpicsService = Depends(get_epics_service)
+    db: AsyncSession = Depends(get_db), 
+    epics: EpicsService = Depends(get_epics_service),
+    redis: RedisService = Depends(get_redis_service)
 ) -> SnapshotService:
     """Get Snapshot service instance."""
-    return SnapshotService(db, epics)
+    return SnapshotService(db, epics, redis)
 
 
 def get_tag_service(db: AsyncSession = Depends(get_db)) -> TagService:
