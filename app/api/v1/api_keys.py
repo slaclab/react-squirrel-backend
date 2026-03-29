@@ -1,4 +1,4 @@
-"""API endpoints for job status monitoring."""
+"""API endpoints for API key management."""
 from fastapi import Depends, APIRouter, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
