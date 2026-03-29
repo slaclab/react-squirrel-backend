@@ -14,6 +14,7 @@ from app.dependencies import require_read_access, require_write_access
 from app.api.responses import APIException, success_response
 from app.schemas.snapshot import NewSnapshotDTO, RestoreRequestDTO, UpdateSnapshotDTO
 from app.services.job_service import JobService
+from app.dependencies import get_snapshot_service
 from app.services.epics_service import EpicsService, get_epics_service
 from app.services.redis_service import get_redis_service
 from app.services.background_tasks import run_snapshot_creation
