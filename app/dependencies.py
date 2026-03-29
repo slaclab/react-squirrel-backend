@@ -56,8 +56,8 @@ async def get_api_key(
             return api_key_dto
 
     raise APIException(
-        error_code=status.HTTP_401_UNAUTHORIZED,
-        message="Missing or deactivated API key",
+        status.HTTP_401_UNAUTHORIZED,
+        "Missing or deactivated API key",
         status_code=status.HTTP_401_UNAUTHORIZED,
     )
 
@@ -66,8 +66,8 @@ def require_read_access(api_key_dto: Annotated[ApiKeyDTO, Security(get_api_key)]
     """Dependency that requires a valid, active API Key with read access."""
     if not api_key_dto.readAccess:
         raise APIException(
-            error_code=status.HTTP_401_UNAUTHORIZED,
-            message="API key does not have read access",
+            status.HTTP_401_UNAUTHORIZED,
+            "API key does not have read access",
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
 
@@ -76,8 +76,8 @@ def require_write_access(api_key_dto: Annotated[ApiKeyDTO, Security(get_api_key)
     """Dependency that requires a valid, active API Key with write access."""
     if not api_key_dto.writeAccess:
         raise APIException(
-            error_code=status.HTTP_401_UNAUTHORIZED,
-            message="API key does not have write access",
+            status.HTTP_401_UNAUTHORIZED,
+            "API key does not have write access",
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
 
