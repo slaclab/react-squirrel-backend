@@ -86,7 +86,10 @@ def require_write_access(api_key_dto: Annotated[ApiKeyDTO, Security(get_api_key)
 # ---------------------------------------------------------------------------
 
 
-async def ws_get_api_key(websocket: WebSocket, db: AsyncSession = Security(get_db)) -> ApiKeyDTO:
+async def ws_get_api_key(
+    websocket: WebSocket, 
+    db: AsyncSession = Depends(get_db)
+) -> ApiKeyDTO:
     """WebSocket variant of get_api_key — raises WebSocketException on failure."""
     key_value = websocket.headers.get("X-API-Key")
     if key_value:
