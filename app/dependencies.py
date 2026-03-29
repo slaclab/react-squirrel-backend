@@ -10,7 +10,7 @@ from app.api.responses import APIException
 from app.schemas.api_key import ApiKeyDTO
 from app.services.pv_service import PVService
 from app.services.tag_service import TagService
-from app.services.epics_service import EpicsService, get_epics_service
+from app.services.epics_service import EpicsService
 from app.services.api_key_service import ApiKeyService
 from app.services.snapshot_service import SnapshotService
 
@@ -20,6 +20,13 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 # ---------------------------------------------------------------------------
 # Service factory dependencies
 # ---------------------------------------------------------------------------
+
+
+def get_epics_service() -> EpicsService:
+    """Get Epics service instance."""
+    # Use the singleton from epics_service.py
+    from app.services.epics_service import get_epics_service as _get_epics_service
+    return _get_epics_service()
 
 
 def get_pv_service(db: AsyncSession = Depends(get_db)) -> PVService:
