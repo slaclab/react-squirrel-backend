@@ -4,7 +4,7 @@ The WebSocket API provides real-time PV value streaming with diff-based updates.
 
 ## Connection
 
-Connect to the WebSocket endpoint:
+Connect to the WebSocket endpoint and include your API key in the `X-API-Key` header:
 
 ```
 ws://localhost:8080/ws
@@ -15,6 +15,9 @@ Or for local development:
 ```
 ws://localhost:8000/ws
 ```
+
+!!! info "Authentication"
+    WebSocket connections require an `X-API-Key` header with a key that has `read_access`. Connections without a valid key are rejected with close code `1008 (Policy Violation)`. See [API Key Management](../getting-started/api-keys.md).
 
 ## Message Format
 
@@ -112,7 +115,9 @@ Multiple updates are batched together (100ms window):
 ## JavaScript Example
 
 ```javascript
-const ws = new WebSocket('ws://localhost:8080/ws');
+const ws = new WebSocket('ws://localhost:8080/ws', [], {
+  headers: { 'X-API-Key': 'sq_your_token_here' }
+});
 
 ws.onopen = () => {
   console.log('Connected to WebSocket');
@@ -167,8 +172,9 @@ import websockets
 
 async def subscribe_to_pvs():
     uri = "ws://localhost:8080/ws"
+    headers = {"X-API-Key": "sq_your_token_here"}
 
-    async with websockets.connect(uri) as websocket:
+    async with websockets.connect(uri, additional_headers=headers) as websocket:
         # Subscribe to PVs
         await websocket.send(json.dumps({
             "action": "subscribe",
@@ -204,12 +210,14 @@ interface PVValue {
   severity: number;
 }
 
-function usePVSubscription(pvNames: string[]) {
+function usePVSubscription(pvNames: string[], apiKey: string) {
   const [values, setValues] = useState<Record<string, PVValue>>({});
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:8080/ws');
+    const ws = new WebSocket('ws://localhost:8080/ws', [], {
+      headers: { 'X-API-Key': apiKey }
+    });
 
     ws.onopen = () => {
       setConnected(true);
@@ -260,10 +268,10 @@ function usePVSubscription(pvNames: string[]) {
 
 // Usage
 function PVDisplay() {
-  const { values, connected } = usePVSubscription([
-    'QUAD:LI21:201:BDES',
-    'QUAD:LI21:201:BACT'
-  ]);
+  const { values, connected } = usePVSubscription(
+    ['QUAD:LI21:201:BDES', 'QUAD:LI21:201:BACT'],
+    'sq_your_token_here'
+  );
 
   return (
     <div>
@@ -349,13 +357,13 @@ The server sends periodic heartbeat messages to keep connections alive:
 Implement reconnection logic in your client:
 
 ```javascript
-function createReconnectingWebSocket(url, onMessage) {
+function createReconnectingWebSocket(url, apiKey, onMessage) {
   let ws;
   let reconnectInterval = 1000;
   const maxInterval = 30000;
 
   function connect() {
-    ws = new WebSocket(url);
+    ws = new WebSocket(url, [], { headers: { 'X-API-Key': apiKey } });
 
     ws.onopen = () => {
       console.log('Connected');

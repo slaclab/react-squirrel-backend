@@ -119,7 +119,45 @@ GET /v1/pvs/paged?cursor=abc123
 
 ## Authentication
 
-Currently, the API does not require authentication. This may change in future versions.
+All endpoints require an API key passed via the `X-API-Key` header:
+
+```
+X-API-Key: sq_your_token_here
+```
+
+Requests without a valid key return `401 Unauthorized`.
+
+### Permission Levels
+
+| Permission | Required for |
+|------------|--------------|
+| `read_access` | GET requests, WebSocket connections |
+| `write_access` | POST, PUT, DELETE requests |
+
+### Getting an API Key
+
+Use the management script to create your first key:
+
+```bash
+# Docker
+docker exec squirrel-api python -m scripts.create_key my-app --read --write
+
+# Local development
+python -m scripts.create_key my-app --read --write
+```
+
+See [API Key Management](../getting-started/api-keys.md) for full details on creating and managing keys.
+
+### API Key Endpoints
+
+The `/v1/api-keys` endpoints allow managing keys via the REST API (requires `write_access`):
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/v1/api-keys` | List all API keys |
+| `POST` | `/v1/api-keys` | Create a new API key |
+| `DELETE` | `/v1/api-keys/{id}` | Deactivate an API key |
+| `GET` | `/v1/api-keys/count` | Count API keys |
 
 ## Rate Limiting
 

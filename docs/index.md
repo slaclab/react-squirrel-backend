@@ -13,6 +13,7 @@ High-performance Python FastAPI backend for EPICS control system snapshot/restor
 - **Persistent Job Queue** - Background tasks survive restarts with automatic retries
 - **Circuit Breaker** - Fail-fast protection against unresponsive IOCs
 - **PostgreSQL Storage** - Reliable relational database with async support
+- **API Key Authentication** - Token-based auth with per-key read/write permissions
 
 ## Technology Stack
 
@@ -88,6 +89,14 @@ High-performance Python FastAPI backend for EPICS control system snapshot/restor
     REST endpoints and WebSocket documentation
 
     [:octicons-arrow-right-24: API Reference](api-reference/index.md)
+
+-   :material-key:{ .lg .middle } **API Keys**
+
+    ---
+
+    Token-based authentication with read/write permissions
+
+    [:octicons-arrow-right-24: API Keys](getting-started/api-keys.md)
 
 </div>
 
