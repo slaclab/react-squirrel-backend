@@ -61,7 +61,7 @@ async def export_database_csv(db: AsyncSession = Depends(get_db)):
     pv_content = pv_output.getvalue()
 
     # ======= Export Tags =======
-    tag_groups = await tag_service.get_all_groups_summary()
+    tag_groups_summary = await tag_service.get_all_groups_summary()
 
     # Generate Tags CSV
     tag_output = io.StringIO()
@@ -71,9 +71,12 @@ async def export_database_csv(db: AsyncSession = Depends(get_db)):
     tag_writer.writerow(["Group ID", "Group Name", "Group Description", "Tag ID", "Tag Name", "Tag Description"])
 
     # Write Tag data into rows for the CSV
-    for group in tag_groups:
-        for tag in group.tags:
-            tag_writer.writerow([group.id, group.name, group.description, tag.id, tag.name, tag.description])
+    # Get full group data with tags for each group
+    for group_summary in tag_groups_summary:
+        group = await tag_service.get_group_by_id(group_summary.id)
+        if group and group.tags:
+            for tag in group.tags:
+                tag_writer.writerow([group.id, group.name, group.description, tag.id, tag.name, tag.description])
 
     # Prepare the Tag rows to put in the CSV file
     tag_content = tag_output.getvalue()
