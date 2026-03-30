@@ -99,7 +99,7 @@ async def update_pv(pv_id: str, data: UpdatePVElementDTO, db: AsyncSession = Dep
 
 
 @router.delete("/{pv_id}", dependencies=[Security(require_write_access)])
-async def delete_pv(pv_id: str, archive: bool = Query(False), db: AsyncSession = Depends(get_db)) -> dict:
+async def delete_pv(pv_id: str, db: AsyncSession = Depends(get_db)) -> dict:
     """Delete a PV."""
     try:
         UUID(pv_id)
