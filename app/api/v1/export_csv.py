@@ -1,5 +1,6 @@
 import io
 import csv
+from datetime import datetime
 
 from fastapi import Depends, Response, APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -84,5 +85,7 @@ async def export_database_csv(db: AsyncSession = Depends(get_db)):
     return Response(
         content=combined_content,
         media_type="csv",
-        headers={"Content-Disposition": "attachment; filename=database_export.csv"},
+        headers={
+            "Content-Disposition": f"attachment; filename=database_export_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+        },
     )
