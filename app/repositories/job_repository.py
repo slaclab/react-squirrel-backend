@@ -69,15 +69,34 @@ class JobRepository(BaseRepository[Job]):
         """Mark a job as running."""
         return await self.update_status(job_id, JobStatus.RUNNING, progress=0, message="Job started")
 
-    async def mark_completed(self, job_id: str, result_id: str | None = None, message: str | None = None) -> Job | None:
+    async def mark_completed(
+        self,
+        job_id: str,
+        result_id: str | None = None,
+        message: str | None = None,
+        result_data: dict | None = None,
+    ) -> Job | None:
         """Mark a job as completed."""
-        return await self.update_status(
-            job_id,
-            JobStatus.COMPLETED,
-            progress=100,
-            result_id=result_id,
-            message=message or "Job completed successfully",
-        )
+        job = await self.get_by_id(job_id)
+        if not job:
+            return None
+
+        job.status = JobStatus.COMPLETED.value
+        job.progress = 100
+        job.message = message or "Job completed successfully"
+        job.completed_at = datetime.now()
+
+        if result_id is not None:
+            job.result_id = result_id
+
+        if result_data:
+            existing = dict(job.job_data or {})
+            existing["result"] = result_data
+            job.job_data = existing
+
+        await self.session.flush()
+        await self.session.refresh(job)
+        return job
 
     async def mark_failed(self, job_id: str, error: str) -> Job | None:
         """Mark a job as failed."""

@@ -158,14 +158,21 @@ async def restore_snapshot_task(ctx: dict, job_id: str, snapshot_id: str, pv_ids
                 "total_pvs": result.totalPVs,
                 "success_count": result.successCount,
                 "failure_count": result.failureCount,
+                "failures": [
+                    {"pvId": f["pvId"], "pvName": f["pvName"], "error": f["error"]} for f in result.failures[:50]
+                ],
             }
-            completion_message = f"Restored {result.successCount}/{result.totalPVs} PVs" + (
-                f" ({result.failureCount} failed)" if result.failureCount > 0 else ""
-            )
+            if result.failureCount > 0:
+                completion_message = (
+                    f"Restored {result.successCount:,}/{result.totalPVs:,} PVs " f"({result.failureCount} failed)"
+                )
+            else:
+                completion_message = f"All {result.totalPVs:,} PVs have been restored to their snapshot values."
             await job_repo.mark_completed(
                 job_id,
                 result_id=snapshot_id,
                 message=completion_message,
+                result_data=result_data,
             )
             await session.commit()
 

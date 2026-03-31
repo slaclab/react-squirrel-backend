@@ -593,7 +593,7 @@ class SnapshotService:
             await progress_callback(
                 total_pvs,
                 total_pvs,
-                f"Completed restore: {success_count}/{total_pvs} PVs successful",
+                f"{success_count:,}/{total_pvs:,} PVs restored",
             )
         total_time = datetime.now()
         logger.info(
