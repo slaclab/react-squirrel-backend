@@ -140,10 +140,7 @@ Use the management script to create your first key:
 
 ```bash
 # Docker
-docker exec squirrel-api python -m scripts.create_key my-app --read --write
-
-# Local development
-python -m scripts.create_key my-app --read --write
+docker exec squirrel-api python scripts/create_key.py <app-name> [--read] [--write]
 ```
 
 See [API Key Management](../getting-started/api-keys.md) for full details on creating and managing keys.

@@ -25,13 +25,7 @@ Since the API itself requires authentication, use the management scripts to crea
 ### Docker
 
 ```bash
-docker exec squirrel-api python scripts/create_key.py "My App" -r -w
-```
-
-### Local Development
-
-```bash
-python scripts/create_key.py "My App" -r -w
+docker exec squirrel-api python scripts/create_key.py <app-name> [-r] [-w]
 ```
 
 **Example output:**
