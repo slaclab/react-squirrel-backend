@@ -1,7 +1,6 @@
 from uuid import UUID
 
 from fastapi import Query, Depends, Security, APIRouter
-from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
