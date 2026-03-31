@@ -4,7 +4,7 @@ from typing import Any
 from datetime import datetime
 from collections.abc import Callable
 
-from aioca import FORMAT_TIME, caget, caput, connect, purge_channel_caches
+from aioca import FORMAT_TIME, CANothing, caget, caput, connect, purge_channel_caches
 
 from app.config import get_settings
 from app.services.epics_types import EpicsValue
@@ -108,6 +108,13 @@ class EpicsService:
         if hasattr(value, "tolist"):
             return self._sanitize_value(value.tolist())
         return value
+
+    def _ca_error_message(self, error_msg: CANothing) -> str:
+        """Convert CA error result to a more user-friendly message."""
+        msg = str(error_msg).strip()
+        if "user specified timeout" in msg.lower():
+            return "Connection timeout"
+        return msg if msg else "Unknown error"
 
     def _augmented_to_epics_value(self, pv_name: str, result) -> EpicsValue:
         """Convert aioca AugmentedValue to our EpicsValue dataclass."""
@@ -421,7 +428,7 @@ class EpicsService:
                     if result.ok:
                         results[original] = (True, None)
                     else:
-                        results[original] = (False, f"Failed: {getattr(result, 'errorcode', 'unknown')}")
+                        results[original] = (False, self._ca_error_message(result))
 
         except Exception as e:
             logger.error(f"Batch put error: {e}")
@@ -511,7 +518,7 @@ class EpicsService:
                 await progress_callback(
                     current,
                     total_pvs,
-                    f"Restored {current:,}/{total_pvs:,} PVs ({success_count:,} successful)",
+                    f"{current:,}/{total_pvs:,} PVs",
                 )
 
             logger.info(f"Restored {current:,}/{total_pvs:,} PVs " f"({success_count:,} successful)")
