@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 
 from app.db.session import async_session_maker
-from app.schemas.snapshot import NewSnapshotDTO, RestoreRequestDTO
+from app.schemas.snapshot import NewSnapshotDTO
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
 from app.services.snapshot_service import SnapshotService
@@ -109,92 +109,6 @@ async def run_snapshot_creation(
                 await session.commit()
             except Exception as inner_e:
                 logger.exception(f"Failed to update job status: {inner_e}")
-
-
-async def run_snapshot_restore(
-    job_id: str,
-    snapshot_id: str,
-    pv_ids: list[str] | None = None,
-) -> None:
-    """
-    Background task to restore a snapshot.
-
-    This runs in a separate asyncio task and uses its own database session.
-    """
-    logger.info(f"Background task started for job {job_id}: Restoring snapshot '{snapshot_id}'")
-
-    async with async_session_maker() as session:
-        try:
-            job_repo = JobRepository(session)
-
-            # Mark job as running
-            await job_repo.mark_running(job_id)
-            await session.commit()
-            await asyncio.sleep(0)
-
-            # Initial progress update
-            await job_repo.update_progress(job_id, 5, "Loading snapshot values...")
-            await session.commit()
-            await asyncio.sleep(0)
-
-            epics = get_epics_service()
-            snapshot_service = SnapshotService(session, epics)
-
-            # Optional restore request
-            request = RestoreRequestDTO(pvIds=pv_ids) if pv_ids else None
-
-            last_update = {"progress": 5, "last_time": datetime.now()}
-
-            async def progress_update(current: int, total: int, message: str):
-                try:
-                    write_progress = int((current / total) * 85) if total > 0 else 0
-                    job_progress = 10 + write_progress
-
-                    now = datetime.now()
-                    time_elapsed = (now - last_update["last_time"]).total_seconds()
-                    progress_changed = job_progress - last_update["progress"] >= 2
-
-                    if progress_changed or time_elapsed >= 2.0 or current >= total:
-                        last_update["progress"] = job_progress
-                        last_update["last_time"] = now
-                        await job_repo.update_progress(job_id, job_progress, message)
-                        await session.commit()
-                        await asyncio.sleep(0)
-                except Exception as e:
-                    logger.error(f"Error in restore progress_update: {e}")
-
-            result = await snapshot_service.restore_snapshot(
-                snapshot_id,
-                request,
-                progress_callback=progress_update,
-            )
-
-            # Final completion update
-            completion_message = f"Restore completed: {result.successCount}/{result.totalPVs} PVs restored" + (
-                f", {result.failureCount} failed" if result.failureCount > 0 else ""
-            )
-
-            await job_repo.mark_completed(
-                job_id,
-                message=completion_message,
-            )
-            await session.commit()
-
-            logger.info(
-                f"Background restore completed for job {job_id}: "
-                f"{result.successCount}/{result.totalPVs} succeeded, "
-                f"{result.failureCount} failed"
-            )
-
-        except Exception as e:
-            logger.exception(f"Background restore failed for job {job_id}: {e}")
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            try:
-                await session.rollback()
-                await job_repo.mark_failed(job_id, error_msg)
-                await session.commit()
-            except Exception as inner_e:
-                logger.exception(f"Failed to update restore job status: {inner_e}")
 
 
 def schedule_snapshot_creation(job_id: str, title: str, description: str | None = None, use_cache: bool = True) -> None:
