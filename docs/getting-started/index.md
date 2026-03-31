@@ -31,6 +31,17 @@ cd docker
 docker compose up --build
 ```
 
+### 3. Create an API key
+
+All endpoints require authentication. Create your first key using the management script:
+
+```bash
+docker exec squirrel-api python scripts/create_key <app-name> [--read] [--write]
+```
+
+!!! warning "Save your token"
+    The token (e.g. `sq_abc123...`) is only shown once. Store it securely before continuing.
+
 **That's it!** The backend is now running:
 
 - **API**: [http://localhost:8080](http://localhost:8080)
@@ -168,4 +179,5 @@ docker exec -it squirrel-redis redis-cli PING
 
 - [Installation options](installation.md) for detailed setup instructions
 - [Configuration](configuration.md) for environment variables
+- [API Keys](api-keys.md) for managing authentication tokens
 - [Architecture](../architecture/index.md) for system design

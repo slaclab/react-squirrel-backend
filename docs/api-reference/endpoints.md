@@ -2,6 +2,114 @@
 
 Detailed documentation for all REST API endpoints.
 
+!!! info "Authentication required"
+    All endpoints require an `X-API-Key` header. GET endpoints need `read_access`; POST/PUT/DELETE endpoints need `write_access`. See [API Key Management](../getting-started/api-keys.md).
+
+## API Key Endpoints
+
+### List API Keys
+
+```
+GET /v1/api-keys
+```
+
+Requires `read_access`.
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `active_only` | boolean | Filter to active keys only (default: false) |
+
+**Response:**
+
+```json
+{
+  "errorCode": 0,
+  "errorMessage": null,
+  "payload": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "app_name": "my-app",
+      "read_access": true,
+      "write_access": true,
+      "is_active": true,
+      "created_at": "2026-03-27T10:00:00Z",
+      "updated_at": "2026-03-27T10:00:00Z"
+    }
+  ]
+}
+```
+
+### Create API Key
+
+```
+POST /v1/api-keys
+```
+
+Requires `write_access`.
+
+**Request Body:**
+
+```json
+{
+  "appName": "new-client",
+  "readAccess": true,
+  "writeAccess": false
+}
+```
+
+**Response:**
+
+```json
+{
+  "errorCode": 0,
+  "errorMessage": null,
+  "payload": {
+    "id": "660e8400-e29b-41d4-a716-446655440001",
+    "app_name": "new-client",
+    "token": "sq_abc123...",
+    "read_access": true,
+    "write_access": false,
+    "is_active": true,
+    "created_at": "2026-03-27T12:00:00Z"
+  }
+}
+```
+
+!!! warning
+    The `token` field only appears in the creation response. It cannot be retrieved again.
+
+### Deactivate API Key
+
+```
+DELETE /v1/api-keys/{id}
+```
+
+Requires `write_access`. Soft-deletes the key (sets `is_active=False`).
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | UUID | API key ID |
+
+### Count API Keys
+
+```
+GET /v1/api-keys/count
+```
+
+Requires `read_access`.
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `active_only` | boolean | Count only active keys (default: false) |
+
+---
+
 ## PV Endpoints
 
 ### Search PVs

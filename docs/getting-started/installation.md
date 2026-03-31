@@ -17,7 +17,13 @@ docker-compose up -d --build
 
 # Configure the database
 docker exec squirrel-api alembic upgrade head
+
+# Create an API key (required to use the API)
+docker exec squirrel-api python script/create_key.py <app-name> [--read] [--write]
 ```
+
+!!! warning "Save your token"
+    The plaintext token is only shown once at creation. Store it securely before continuing.
 
 This starts:
 

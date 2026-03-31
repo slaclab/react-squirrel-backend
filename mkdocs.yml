@@ -104,6 +104,7 @@ nav:
     - getting-started/index.md
     - Installation: getting-started/installation.md
     - Configuration: getting-started/configuration.md
+    - API Keys: getting-started/api-keys.md
   - Architecture:
     - architecture/index.md
     - Distributed System: architecture/distributed-system.md
