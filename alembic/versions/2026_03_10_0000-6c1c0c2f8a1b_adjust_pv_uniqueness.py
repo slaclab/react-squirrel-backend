@@ -1,7 +1,7 @@
 """Adjust PV address uniqueness constraints.
 
 Revision ID: 6c1c0c2f8a1b
-Revises: 61476c608fc3
+Revises: 7cb2f0b7580f
 Create Date: 2026-03-10 00:00:00.000000
 """
 from collections.abc import Sequence
@@ -10,7 +10,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "6c1c0c2f8a1b"
-down_revision: str | None = "61476c608fc3"
+down_revision: str | None = "7cb2f0b7580f"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
