@@ -450,6 +450,8 @@
       
         
       
+        
+      
     
     
     
@@ -808,6 +810,34 @@
     
   
     Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-keys/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Keys
   
 
     
@@ -1600,7 +1630,14 @@
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Configure the database</span>
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>docker<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>squirrel-api<span class="w"> </span>alembic<span class="w"> </span>upgrade<span class="w"> </span>head
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="c1"># Create an API key (required to use the API)</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>docker<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>squirrel-api<span class="w"> </span>python<span class="w"> </span>script/create_key.py<span class="w"> </span>&lt;app-name&gt;<span class="w"> </span><span class="o">[</span>--read<span class="o">]</span><span class="w"> </span><span class="o">[</span>--write<span class="o">]</span>
 </code></pre></div>
+<div class="admonition warning">
+<p class="admonition-title">Save your token</p>
+<p>The plaintext token is only shown once at creation. Store it securely before continuing.</p>
+</div>
 <p>This starts:</p>
 <table>
 <thead>
@@ -1819,7 +1856,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="January 27, 2026 19:35:15 UTC">January 27, 2026</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="March 31, 2026 00:02:42 UTC">March 31, 2026</span>
   </span>
 
     
@@ -1846,6 +1883,11 @@
 
     
     <nav>
+      
+        <a href="https://github.com/zdomke" class="md-author" title="@zdomke">
+          
+          <img src="https://avatars.githubusercontent.com/u/102621345?v=4&size=72" alt="zdomke">
+        </a>
       
         <a href="https://github.com/YektaY" class="md-author" title="@YektaY">
           
