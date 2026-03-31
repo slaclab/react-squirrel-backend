@@ -1,6 +1,7 @@
 """
 Pytest configuration and fixtures for squirrel-backend tests.
 """
+
 import asyncio
 import logging
 from datetime import datetime
@@ -161,7 +162,7 @@ async def sample_tag(client: AsyncClient, sample_tag_group: dict) -> tuple[dict,
         f"/v1/tags/{group_id}/tags", json={"name": "Building-A", "description": "Building A location"}
     )
     assert response.status_code == 200
-    group = response.json()["payload"]
+    group = response.json()["payload"]["group"]
     tag = group["tags"][0]
     return group, tag
 

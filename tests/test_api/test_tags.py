@@ -165,8 +165,8 @@ class TestTagOperations:
         assert response.status_code == 200
         data = response.json()
         assert data["errorCode"] == 0
-        assert len(data["payload"]["tags"]) == 1
-        assert data["payload"]["tags"][0]["name"] == "Building-A"
+        assert len(data["payload"]["group"]["tags"]) == 1
+        assert data["payload"]["group"]["tags"][0]["name"] == "Building-A"
 
     @pytest.mark.asyncio
     async def test_add_multiple_tags_to_group(self, client: AsyncClient, sample_tag_group: dict):
@@ -181,7 +181,7 @@ class TestTagOperations:
 
         assert response.status_code == 200
         data = response.json()
-        assert len(data["payload"]["tags"]) == 2
+        assert len(data["payload"]["group"]["tags"]) == 2
 
     @pytest.mark.asyncio
     async def test_add_duplicate_tag_fails(self, client: AsyncClient, sample_tag: tuple):
