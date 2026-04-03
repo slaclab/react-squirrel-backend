@@ -38,6 +38,8 @@ services:
     container_name: squirrel-api
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
+      RUN_MIGRATIONS: "true"  # Dev only - run migrations manually in prod
+
       SQUIRREL_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       SQUIRREL_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       SQUIRREL_DEBUG: "${SQUIRREL_DEBUG}"
