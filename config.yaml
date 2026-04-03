@@ -1,0 +1,9 @@
+# Basic Component Information
+repo: react-squirrel-backend
+organization: slaclab
+url: https://github.com/slaclab/react-squirrel-backend
+description: A FastAPI backend with Postgres database for the react version of Squirrel
+
+# Deployment playbook
+deploy:
+  playbook: container_module/container_deploy.yml
