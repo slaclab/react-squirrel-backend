@@ -128,6 +128,13 @@ async def restore_snapshot_task(ctx: dict, job_id: str, snapshot_id: str, pv_ids
             await job_repo.mark_running(job_id)
             await session.commit()
 
+            # Create progress callback for job updates
+            async def on_progress(current: int, total: int, message: str) -> None:
+                progress = int((current / total) * 100) if total > 0 else 0
+                await job_repo.update_progress(job_id, progress, message)
+                await session.commit()
+                logger.debug(f"Restore job {job_id} progress: {progress}% - {message}")
+
             # Initialize services
             epics = ctx.get("epics") or get_epics_service()
 
@@ -140,16 +147,32 @@ async def restore_snapshot_task(ctx: dict, job_id: str, snapshot_id: str, pv_ids
             request = RestoreRequestDTO(pvIds=pv_ids) if pv_ids else None
 
             # Restore the snapshot
-            result = await snapshot_service.restore_snapshot(snapshot_id, request)
+            result = await snapshot_service.restore_snapshot(
+                snapshot_id,
+                request,
+                progress_callback=on_progress,
+            )
 
             # Mark job as completed
             result_data = {
                 "total_pvs": result.totalPVs,
                 "success_count": result.successCount,
                 "failure_count": result.failureCount,
+                "failures": [
+                    {"pvId": f["pvId"], "pvName": f["pvName"], "error": f["error"]} for f in result.failures[:50]
+                ],
             }
+            if result.failureCount > 0:
+                completion_message = (
+                    f"Restored {result.successCount:,}/{result.totalPVs:,} PVs " f"({result.failureCount} failed)"
+                )
+            else:
+                completion_message = f"All {result.totalPVs:,} PVs have been restored to their snapshot values."
             await job_repo.mark_completed(
-                job_id, result_id=snapshot_id, message=f"Restored {result.successCount}/{result.totalPVs} PVs"
+                job_id,
+                result_id=snapshot_id,
+                message=completion_message,
+                result_data=result_data,
             )
             await session.commit()
 
