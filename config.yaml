@@ -1,31 +1,9 @@
-# [Required]
-# Basic component information
+# Basic Component Information
 repo: react-squirrel-backend
-organization: ad-build-test
-url: https://github.com/ad-build-test/react-squirrel-backend
-description: test react-squirrel-backend
+organization: slaclab
+url: https://github.com/slaclab/react-squirrel-backend
+description: A FastAPI backend with Postgres database for the react version of Squirrel
 
-# [Required]
-# Continous integration
-approvalRule: all
-testingCriteria: all
-issueTracker: github
-jiraProjectKey: n/a
-
-# [Required]
-# Type of deployment
-# Types: [ioc, hla, tools, matlab, pydm, container]
-deploymentType: container
-
-# [Optional] 
-# Build method for building the component
-# Can be a simple command like 'make'
-# build: 
-
-# [Optional]
-# Environments this app runs on
-# environments:
-
-# [Optional]
-# Directories and files needed to run application
-# runtimeDependencies:
+# Deployment playbook
+deploy:
+  playbook: container_module/container_deploy.yml
