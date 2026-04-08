@@ -1,0 +1,33 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Release tag to deploy (e.g., v1.2.0)'
+        required: true
+        type: string
+      migration_command:
+        description: 'Migration command (default: alembic upgrade head). For rollbacks use e.g. alembic downgrade <revision>'
+        required: false
+        type: string
+        default: 'alembic upgrade head'
+
+permissions:
+  deployments: write
+  contents: read
+  actions: read
+
+jobs:
+  deploy:
+    uses: ad-build-test/build-system-playbooks/.github/workflows/request-deployment.yml@main
+    with:
+      deploy_to_container_prod: true
+      tag: ${{ inputs.image_tag }}
+      playbook: container_module/container_deploy.yml
+      docker_network: squirrel-net
+      migration_command: ${{ inputs.migration_command }}
+      health_check_path: /health
+    secrets:
+      database_url: ${{ secrets.PROD_DATABASE_URL }}
+      redis_url: ${{ secrets.PROD_REDIS_URL }}
