@@ -11,12 +11,12 @@ from app.db.session import get_db
 from app.models.job import JobType
 from app.schemas.job import JobCreatedDTO
 from app.dependencies import require_read_access, require_write_access
-from app.api.responses import APIException, error_response, success_response
+from app.api.responses import APIException, success_response
 from app.schemas.snapshot import NewSnapshotDTO, RestoreRequestDTO, UpdateSnapshotDTO
 from app.services.job_service import JobService
 from app.services.epics_service import EpicsService, get_epics_service
 from app.services.redis_service import get_redis_service
-from app.services.background_tasks import run_snapshot_creation
+from app.services.background_tasks import run_snapshot_restore, run_snapshot_creation
 from app.services.snapshot_service import SnapshotService
 
 logger = logging.getLogger(__name__)
@@ -188,9 +188,11 @@ async def update_snapshot(
 @router.post("/{snapshot_id}/restore", dependencies=[Security(require_write_access)])
 async def restore_snapshot(
     snapshot_id: str,
+    background_tasks: BackgroundTasks,
     request: RestoreRequestDTO | None = None,
     db: AsyncSession = Depends(get_db),
     async_mode: bool = Query(True, alias="async"),
+    use_arq: bool = Query(True, description="Use Arq persistent queue (recommended) vs FastAPI BackgroundTasks"),
     epics: EpicsService = Depends(get_epics_service),
 ) -> dict:
     """
@@ -217,25 +219,38 @@ async def restore_snapshot(
         )
 
         await db.commit()
-        pool = await get_arq_pool()
-        if pool:
-            try:
-                await pool.enqueue_job(
-                    "restore_snapshot_task",
-                    job_id=str(job.id),
-                    snapshot_id=snapshot_id,
-                    pv_ids=request.pvIds if request else None,
-                )
-                logger.info(f"Enqueued restore job to Arq: {job.id}")
+        pv_ids = request.pvIds if request else None
 
-                return success_response(
-                    JobCreatedDTO(
-                        jobId=job.id,
-                        message=f"Snapshot restore queued ({snapshot_id})",
+        if use_arq:
+            pool = await get_arq_pool()
+            if pool:
+                try:
+                    await pool.enqueue_job(
+                        "restore_snapshot_task",
+                        job_id=str(job.id),
+                        snapshot_id=snapshot_id,
+                        pv_ids=pv_ids,
                     )
-                )
-            except Exception as e:
-                return error_response(500, f"Failed to enqueue to Arq: {e}")
+                    logger.info(f"Enqueued restore job to Arq: {job.id}")
+
+                    return success_response(
+                        JobCreatedDTO(
+                            jobId=job.id,
+                            message=f"Snapshot restore queued ({snapshot_id})",
+                        )
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to enqueue to Arq, falling back to BackgroundTasks: {e}")
+
+        # Fallback to FastAPI BackgroundTasks
+        background_tasks.add_task(run_snapshot_restore, str(job.id), snapshot_id, pv_ids)
+        logger.info(f"Scheduled restore job via BackgroundTasks: {job.id}")
+        return success_response(
+            JobCreatedDTO(
+                jobId=job.id,
+                message=f"Snapshot restore started ({snapshot_id})",
+            )
+        )
 
     result = await service.restore_snapshot(snapshot_id, request)
     return success_response(result)
