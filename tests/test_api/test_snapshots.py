@@ -114,7 +114,7 @@ class TestSnapshotRestore:
     async def test_restore_snapshot(self, client: AsyncClient, sample_snapshot: dict, mock_epics: MockEpicsService):
         """Test restoring a snapshot writes values to EPICS."""
         snapshot_id = sample_snapshot["id"]
-        response = await client.post(f"/v1/snapshots/{snapshot_id}/restore")
+        response = await client.post(f"/v1/snapshots/{snapshot_id}/restore?async=false")
 
         assert response.status_code == 200
         data = response.json()
@@ -131,7 +131,7 @@ class TestSnapshotRestore:
         snapshot_id = sample_snapshot["id"]
         pv_ids = [sample_pvs[0]["id"], sample_pvs[1]["id"]]
 
-        response = await client.post(f"/v1/snapshots/{snapshot_id}/restore", json={"pvIds": pv_ids})
+        response = await client.post(f"/v1/snapshots/{snapshot_id}/restore?async=false", json={"pvIds": pv_ids})
 
         assert response.status_code == 200
         data = response.json()
