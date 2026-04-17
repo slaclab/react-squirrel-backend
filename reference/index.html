@@ -1311,6 +1311,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#app.services.epics_service.EpicsService.put_many_with_progress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;put_many_with_progress
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#app.services.epics_service.EpicsService.shutdown" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2970,6 +2981,29 @@ aioca's efficient parallel connections within each batch.</p>
 
         <p>Put values to multiple PVs.</p>
 <p>aioca caput with lists writes in sequence if PVs are pre-connected.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="app.services.epics_service.EpicsService.put_many_with_progress" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">put_many_with_progress</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">progress_callback</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#app.services.epics_service.EpicsService.put_many_with_progress" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Put values to multiple PVs with progress tracking.
+Can be used to update the user on progress when a snapshot restore is initiated.</p>
 
 
     </div>
@@ -4843,7 +4877,7 @@ by the PV Monitor background service.</p>
 
 
 <h4 id="app.services.snapshot_service.SnapshotService.restore_snapshot" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">restore_snapshot</span><span class="p">(</span><span class="n">snapshot_id</span><span class="p">,</span> <span class="n">request</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">restore_snapshot</span><span class="p">(</span><span class="n">snapshot_id</span><span class="p">,</span> <span class="n">request</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">progress_callback</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-async"><code>async</code></small>
