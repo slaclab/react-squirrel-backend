@@ -4,7 +4,7 @@ from typing import Any
 from datetime import datetime
 from collections.abc import Callable
 
-from aioca import FORMAT_TIME, caget, caput, connect, purge_channel_caches
+from aioca import FORMAT_TIME, CANothing, caget, caput, connect, purge_channel_caches
 
 from app.config import get_settings
 from app.services.epics_types import EpicsValue
@@ -108,6 +108,13 @@ class EpicsService:
         if hasattr(value, "tolist"):
             return self._sanitize_value(value.tolist())
         return value
+
+    def _ca_error_message(self, error_msg: CANothing) -> str:
+        """Convert CA error result to a more user-friendly message."""
+        msg = str(error_msg).strip()
+        if "user specified timeout" in msg.lower():
+            return "Connection timeout"
+        return msg if msg else "Unknown error"
 
     def _augmented_to_epics_value(self, pv_name: str, result) -> EpicsValue:
         """Convert aioca AugmentedValue to our EpicsValue dataclass."""
@@ -421,7 +428,7 @@ class EpicsService:
                     if result.ok:
                         results[original] = (True, None)
                     else:
-                        results[original] = (False, f"Failed: {getattr(result, 'errorcode', 'unknown')}")
+                        results[original] = (False, self._ca_error_message(result))
 
         except Exception as e:
             logger.error(f"Batch put error: {e}")
@@ -469,6 +476,54 @@ class EpicsService:
                 except Exception as e:
                     logger.error(f"PVA put_many fallback error: {e}")
 
+        return results
+
+    async def put_many_with_progress(
+        self,
+        values: dict[str, Any],
+        progress_callback: Callable | None = None,
+    ) -> dict[str, tuple[bool, str | None]]:
+        """
+        Put values to multiple PVs with progress tracking.
+        Can be used to update the user on progress when a snapshot restore is initiated.
+        """
+        total_pvs = len(values)
+        results: dict[str, tuple[bool, str | None]] = {}
+
+        logger.info(f"Starting put_many_with_progress for {total_pvs} PVs")
+
+        if progress_callback:
+            await progress_callback(0, total_pvs, f"Starting restore of {total_pvs:,} PVs")
+
+        items = list(values.items())
+        batch_size = self._chunk_size
+
+        for i in range(0, total_pvs, batch_size):
+            batch_items = items[i : i + batch_size]
+            batch_values = dict(batch_items)
+
+            try:
+                batch_results = await self.put_many(batch_values)
+                results.update(batch_results)
+            except Exception as e:
+                logger.error(f"Chunk put error ({i}-{i + len(batch_items)}): {e}")
+                for pv_name, _ in batch_items:
+                    if pv_name not in results:
+                        results[pv_name] = (False, str(e))
+
+            current = min(i + batch_size, total_pvs)
+            success_count = sum(1 for ok, _ in results.values() if ok)
+
+            if progress_callback:
+                await progress_callback(
+                    current,
+                    total_pvs,
+                    f"{current:,}/{total_pvs:,} PVs",
+                )
+
+            logger.info(f"Restored {current:,}/{total_pvs:,} PVs " f"({success_count:,} successful)")
+
+        logger.info(f"Completed put_many_with_progress: {len(results)}/{total_pvs} PVs processed")
         return results
 
     async def shutdown(self):

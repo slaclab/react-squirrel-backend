@@ -14,6 +14,7 @@ class JobDTO(BaseModel):
     message: str | None = None
     resultId: str | None = None
     error: str | None = None
+    jobData: dict | None = None
     createdAt: datetime
     startedAt: datetime | None = None
     completedAt: datetime | None = None
