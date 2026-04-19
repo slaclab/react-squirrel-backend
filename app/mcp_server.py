@@ -45,6 +45,13 @@ async def _get(path: str, params: dict | None = None) -> dict:
         r.raise_for_status()
         return r.json()
 
+
+async def _post(path: str, body: dict | None = None) -> dict:
+    async with httpx.AsyncClient() as client:
+        r = await client.post(f"{API_URL}{path}", headers=_headers(), json=body or {}, timeout=30)
+        r.raise_for_status()
+        return r.json()
+
 @server.list_tools()
 async def list_tools() -> list[types.Tool]:
     return [
