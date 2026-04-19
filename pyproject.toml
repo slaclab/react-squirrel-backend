@@ -21,6 +21,7 @@ dependencies = [
     "arq>=0.26.0",
     "aiobreaker>=1.2.0",
     "greenlet>=3.3.0",
+    "mcp>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -42,6 +43,9 @@ docs = [
     "mkdocs-git-revision-date-localized-plugin",
     "mkdocs-git-committers-plugin-2",
 ]
+
+[project.scripts]
+squirrel-mcp = "app.mcp_server:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]
