@@ -567,8 +567,8 @@ Get the status and progress of a background job.
   "errorMessage": null,
   "payload": {
     "id": "...",
-    "type": "CREATE_SNAPSHOT",
-    "status": "IN_PROGRESS",
+    "type": "snapshot_create",
+    "status": "running",
     "progress": 45,
     "data": {
       "processed": 675,
@@ -581,19 +581,33 @@ Get the status and progress of a background job.
 }
 ```
 
+**Job Type Values:**
+
+| Type | Description |
+|------|-------------|
+| `snapshot_create` | Creating a snapshot |
+| `snapshot_restore` | Restoring a snapshot to EPICS |
+
 **Job Status Values:**
 
 | Status | Description |
 |--------|-------------|
-| `PENDING` | Job created, waiting for worker |
-| `IN_PROGRESS` | Worker is processing |
-| `COMPLETED` | Successfully finished |
-| `FAILED` | Error occurred |
-| `RETRYING` | Automatic retry in progress |
+| `pending` | Job created, waiting for worker |
+| `running` | Worker is processing |
+| `completed` | Successfully finished |
+| `failed` | Error occurred |
 
 ---
 
 ## Health Endpoints
+
+### Heartbeat
+
+```
+GET /v1/health/heartbeat
+```
+
+Simple heartbeat check for frontend polling. No authentication required.
 
 ### Overall Health
 
@@ -602,6 +616,14 @@ GET /v1/health
 ```
 
 Check overall API health.
+
+### Health Summary
+
+```
+GET /v1/health/summary
+```
+
+Complete health summary for monitoring dashboards. Includes database, Redis, monitor, and watchdog status.
 
 ### Database Health
 
@@ -619,13 +641,21 @@ GET /v1/health/redis
 
 Check Redis connectivity.
 
+### Monitor Health
+
+```
+GET /v1/health/monitor
+```
+
+Detailed PV monitor health information.
+
 ### Monitor Status
 
 ```
 GET /v1/health/monitor/status
 ```
 
-Check PV monitor process health.
+Check PV monitor process health via Redis heartbeat.
 
 **Response:**
 
@@ -641,6 +671,44 @@ Check PV monitor process health.
   }
 }
 ```
+
+### Watchdog Statistics
+
+```
+GET /v1/health/watchdog
+```
+
+Get watchdog health monitoring statistics.
+
+### Force Watchdog Check
+
+```
+POST /v1/health/watchdog/check
+```
+
+Force an immediate watchdog health check. Requires `write_access`.
+
+### Disconnected PVs
+
+```
+GET /v1/health/disconnected
+```
+
+List all PVs currently disconnected from EPICS.
+
+### Stale PVs
+
+```
+GET /v1/health/stale
+```
+
+List PVs that haven't been updated recently.
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `max_age_seconds` | float | Consider PVs stale after this many seconds |
 
 ### Circuit Breaker Status
 
@@ -664,3 +732,31 @@ Check circuit breaker status by IOC prefix.
   }
 }
 ```
+
+### Force Close Circuit Breaker
+
+```
+POST /v1/health/circuits/{circuit_name}/close
+```
+
+Force close (reset) a circuit breaker. Requires `write_access`.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `circuit_name` | string | IOC prefix (e.g., `QUAD:LI21`) |
+
+### Force Open Circuit Breaker
+
+```
+POST /v1/health/circuits/{circuit_name}/open
+```
+
+Force open a circuit breaker (block all requests to this IOC). Requires `write_access`.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `circuit_name` | string | IOC prefix (e.g., `BPM:LI22`) |

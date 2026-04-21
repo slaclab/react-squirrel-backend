@@ -12,7 +12,6 @@ Benefits of decoupled architecture:
 - Independent scaling and deployment
 """
 
-import os
 import logging
 from contextlib import asynccontextmanager
 
@@ -24,19 +23,14 @@ from app.config import get_settings
 from app.api.responses import APIException
 from app.api.v1.router import router as v1_router
 from app.api.v1.websocket import get_diff_manager
-from app.services.pv_protocol import is_unprefixed, parse_pv_name
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
-from app.services.pvaccess_monitor import get_pvaccess_monitor
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
-
-# Environment variable to optionally enable embedded monitor (for backward compatibility)
-EMBEDDED_MONITOR = os.environ.get("SQUIRREL_EMBEDDED_MONITOR", "false").lower() == "true"
 
 
 @asynccontextmanager
@@ -78,15 +72,7 @@ async def lifespan(app: FastAPI):
         if monitor_alive:
             logger.info("PV Monitor process detected (via heartbeat)")
         else:
-            logger.warning(
-                "PV Monitor process not detected - start squirrel-monitor separately, "
-                "or set SQUIRREL_EMBEDDED_MONITOR=true to run embedded"
-            )
-
-        # Optionally start embedded monitor (for backward compatibility/development)
-        if EMBEDDED_MONITOR:
-            logger.info("Starting EMBEDDED PV Monitor (SQUIRREL_EMBEDDED_MONITOR=true)")
-            await _start_embedded_monitor(redis_service, epics)
+            logger.warning("PV Monitor process not detected - start squirrel-monitor separately")
 
         # Start WebSocket diff stream manager (subscribes to Redis pub/sub)
         diff_manager = get_diff_manager()
@@ -103,10 +89,6 @@ async def lifespan(app: FastAPI):
 
     # Cleanup
     logger.info("Shutting down Squirrel API...")
-
-    # Stop embedded monitor if running
-    if EMBEDDED_MONITOR:
-        await _stop_embedded_monitor()
 
     # Stop WebSocket manager
     try:
@@ -130,100 +112,6 @@ async def lifespan(app: FastAPI):
     logger.info("EPICS service shut down")
 
     logger.info("Squirrel API shutdown complete")
-
-
-async def _start_embedded_monitor(redis_service, epics):
-    """
-    Start PV Monitor and Watchdog in embedded mode (backward compatibility).
-
-    This is enabled by setting SQUIRREL_EMBEDDED_MONITOR=true.
-    """
-    from app.db.session import async_session_maker
-    from app.services.watchdog import get_watchdog
-    from app.services.pv_monitor import get_pv_monitor
-    from app.repositories.pv_repository import PVRepository
-
-    pv_monitor = get_pv_monitor(redis_service)
-    pva_monitor = None
-
-    # Get all PV addresses from database
-    async with async_session_maker() as session:
-        pv_repo = PVRepository(session)
-        pv_addresses_data = await pv_repo.get_all_addresses()
-
-        # Extract unique addresses (setpoint and readback)
-        pv_addresses = set()
-        for _, setpoint, readback, config in pv_addresses_data:
-            if setpoint:
-                pv_addresses.add(setpoint)
-            if readback:
-                pv_addresses.add(readback)
-
-    # Start PV monitoring (with batched startup)
-    ca_pvs: list[str] = []
-    pva_pvs: list[str] = []
-    for pv_name in pv_addresses:
-        protocol, _ = parse_pv_name(pv_name)
-        if protocol == "pva":
-            pva_pvs.append(pv_name)
-        else:
-            ca_pvs.append(pv_name)
-            if settings.epics_unprefixed_pva_fallback and is_unprefixed(pv_name):
-                pva_pvs.append(pv_name)
-
-    if pv_addresses:
-        logger.info(f"[EMBEDDED] Starting PV Monitor for {len(ca_pvs)} CA and {len(pva_pvs)} PVA addresses")
-        await pv_monitor.start(ca_pvs)
-        logger.info(f"[EMBEDDED] PV Monitor started for {len(ca_pvs)} CA addresses")
-
-        if pva_pvs:
-            pva_monitor = get_pvaccess_monitor(redis_service)
-            await pva_monitor.start(pva_pvs)
-            logger.info(f"[EMBEDDED] PVAccess Monitor started for {len(pva_pvs)} PVA addresses")
-        else:
-            logger.info("[EMBEDDED] No PVA addresses found; PVAccess Monitor not started")
-    else:
-        logger.warning("[EMBEDDED] No PV addresses found in database")
-
-    # Start Watchdog if enabled
-    if settings.watchdog_enabled:
-        watchdog = get_watchdog(redis_service, epics, pv_monitor, pva_monitor if pva_pvs else None)
-        await watchdog.start()
-        logger.info("[EMBEDDED] Watchdog started")
-
-
-async def _stop_embedded_monitor():
-    """Stop embedded PV Monitor and Watchdog."""
-    from app.services.watchdog import get_watchdog
-    from app.services.pv_monitor import get_pv_monitor
-
-    # Stop Watchdog
-    if settings.watchdog_enabled:
-        try:
-            watchdog = get_watchdog()
-            if watchdog.is_running():
-                await watchdog.stop()
-                logger.info("[EMBEDDED] Watchdog stopped")
-        except Exception as e:
-            logger.error(f"Error stopping Watchdog: {e}")
-
-    # Stop PV Monitor
-    try:
-        pv_monitor = get_pv_monitor()
-        if pv_monitor.is_running():
-            await pv_monitor.stop()
-            logger.info("[EMBEDDED] PV Monitor stopped")
-    except Exception as e:
-        logger.error(f"Error stopping PV Monitor: {e}")
-
-    # Stop PVAccess Monitor
-    try:
-        pva_monitor = get_pvaccess_monitor()
-        if pva_monitor.is_running():
-            await pva_monitor.stop()
-            logger.info("[EMBEDDED] PVAccess Monitor stopped")
-    except Exception as e:
-        logger.error(f"Error stopping PVAccess Monitor: {e}")
 
 
 app = FastAPI(

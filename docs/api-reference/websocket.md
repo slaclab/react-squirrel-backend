@@ -7,14 +7,16 @@ The WebSocket API provides real-time PV value streaming with diff-based updates.
 Connect to the WebSocket endpoint and include your API key in the `X-API-Key` header:
 
 ```
-ws://localhost:8080/ws
+ws://localhost:8080/v1/ws/pvs
 ```
 
 Or for local development:
 
 ```
-ws://localhost:8000/ws
+ws://localhost:8000/v1/ws/pvs
 ```
+
+An alias endpoint is also available at `/v1/ws/live` for compatibility.
 
 !!! info "Authentication"
     WebSocket connections require an `X-API-Key` header with a key that has `read_access`. Connections without a valid key are rejected with close code `1008 (Policy Violation)`. See [API Key Management](../getting-started/api-keys.md).
@@ -115,7 +117,7 @@ Multiple updates are batched together (100ms window):
 ## JavaScript Example
 
 ```javascript
-const ws = new WebSocket('ws://localhost:8080/ws', [], {
+const ws = new WebSocket('ws://localhost:8080/v1/ws/pvs', [], {
   headers: { 'X-API-Key': 'sq_your_token_here' }
 });
 
@@ -171,7 +173,7 @@ import json
 import websockets
 
 async def subscribe_to_pvs():
-    uri = "ws://localhost:8080/ws"
+    uri = "ws://localhost:8080/v1/ws/pvs"
     headers = {"X-API-Key": "sq_your_token_here"}
 
     async with websockets.connect(uri, additional_headers=headers) as websocket:
@@ -215,7 +217,7 @@ function usePVSubscription(pvNames: string[], apiKey: string) {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:8080/ws', [], {
+    const ws = new WebSocket('ws://localhost:8080/v1/ws/pvs', [], {
       headers: { 'X-API-Key': apiKey }
     });
 

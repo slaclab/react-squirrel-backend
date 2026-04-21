@@ -172,15 +172,6 @@ This starts:
 - **Monitor** (1 replica) - PV monitoring
 - **Worker** (2 replicas) - Background task processing
 
-### Legacy Mode
-
-For simpler deployments or backward compatibility:
-
-```bash
-cd docker
-docker-compose --profile legacy up backend db redis
-```
-
 ### Local Development
 
 ```bash

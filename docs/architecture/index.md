@@ -6,6 +6,8 @@ The system uses a **distributed architecture** with separate processes for API s
 
 ## System Architecture
 
+![Architecture Diagram](../assets/architecture_diagram.png)
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              Load Balancer                                   │
@@ -59,18 +61,7 @@ The system uses a **distributed architecture** with separate processes for API s
     └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Technology Stack
-
-| Category | Technology | Purpose |
-|----------|------------|---------|
-| **Framework** | FastAPI 0.109+ | REST API and WebSocket |
-| **Language** | Python 3.11+ | Async/await support |
-| **Database** | PostgreSQL 16+ | Primary data store |
-| **ORM** | SQLAlchemy 2.0+ (async) | Database abstraction |
-| **Cache** | Redis 7+ | PV value caching, pub/sub |
-| **EPICS** | aioca 1.7+ | Async Channel Access |
-| **Task Queue** | Arq | Redis-backed job queue |
-| **Server** | Uvicorn | ASGI server |
+For the full technology stack, see the [Home](../index.md#technology-stack) page.
 
 ## Directory Structure
 

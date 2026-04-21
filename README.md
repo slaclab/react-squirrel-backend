@@ -5,7 +5,7 @@ High-performance Python FastAPI backend for EPICS control system snapshot/restor
 ## Features
 
 - **Distributed Architecture**: Separate processes for API, PV monitoring, and background tasks
-- **Fast Snapshot Creation**: Parallel EPICS reads or instant Redis cache reads (<5s for 40K PVs)
+- **Fast Snapshot Creation**: Instant Redis cache reads by default (<5s for 40K PVs), with optional direct EPICS reads for guaranteed-fresh values
 - **Efficient Restore Operations**: Parallel EPICS writes for quick machine state restoration
 - **Real-Time Updates**: WebSocket streaming with diff-based updates and multi-instance support
 - **Tag-based Organization**: Group and categorize PVs using hierarchical tags
@@ -24,7 +24,7 @@ High-performance Python FastAPI backend for EPICS control system snapshot/restor
 | ORM | SQLAlchemy 2.0 (async) |
 | Cache/Queue | Redis 7+ |
 | Task Queue | Arq |
-| EPICS | aioca (async Channel Access) |
+| EPICS | aioca (Channel Access), p4p (PVAccess) |
 | Migrations | Alembic |
 | Validation | Pydantic v2 |
 
@@ -81,24 +81,7 @@ To reset the database (delete all data):
 docker compose down -v
 ```
 
-### Option 2: Legacy Mode (Single Process)
-
-For simpler deployments with embedded PV monitoring:
-
-```bash
-cd docker
-cp .env.example .env
-docker compose --profile legacy up backend db redis
-```
-
-This runs the API with embedded PV monitor on port `8001`.
-
-**Note**: Workers are still required for snapshot creation. Start them separately:
-```bash
-docker compose up -d worker
-```
-
-### Option 3: Local Development
+### Option 2: Local Development
 
 Run infrastructure in Docker, services locally for faster development:
 
@@ -138,28 +121,7 @@ arq app.worker.WorkerSettings                   # Worker (REQUIRED for snapshots
 
 ## Architecture Overview
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   API Server    │     │   PV Monitor    │     │   Arq Worker    │
-│  (squirrel-api) │     │(squirrel-monitor)│     │(squirrel-worker)│
-│  REST/WebSocket │     │  EPICS → Redis  │     │  Snapshot jobs  │
-└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-                    ┌────────────┴────────────┐
-                    ▼                         ▼
-            ┌─────────────┐           ┌─────────────┐
-            │    Redis    │           │  PostgreSQL │
-            │ Cache/Queue │           │   Storage   │
-            └─────────────┘           └─────────────┘
-                    │
-                    ▼
-            ┌─────────────┐
-            │  EPICS IOCs │
-            │  40-50K PVs │
-            └─────────────┘
-```
+![Architecture Diagram](docs/assets/architecture_diagram.png)
 
 For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -382,7 +344,6 @@ All configuration is via environment variables (with `SQUIRREL_` prefix):
 | `SQUIRREL_EPICS_CHUNK_SIZE` | `1000` | PVs per batch in parallel ops |
 | `SQUIRREL_PV_MONITOR_BATCH_SIZE` | `500` | PVs per subscription batch |
 | `SQUIRREL_WATCHDOG_ENABLED` | `true` | Enable health monitoring |
-| `SQUIRREL_EMBEDDED_MONITOR` | `false` | Run monitor in API process |
 | `SQUIRREL_DEBUG` | `false` | Enable debug logging |
 
 See `.env.example` for a complete template.
@@ -586,7 +547,7 @@ python -m scripts.benchmark --skip-restore
 ## Frontend
 
 The Squirrel React frontend is available at:
-- Repository: `squirrel` (separate repo)
+- Repository: [react-squirrel](https://github.com/slaclab/react-squirrel)
 - Default API URL: `http://localhost:8000`
 
 Configure the frontend to point to this backend by setting the API base URL.

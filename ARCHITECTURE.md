@@ -6,20 +6,11 @@ Squirrel Backend is a high-performance FastAPI application designed to manage an
 
 The system uses a **distributed architecture** with separate processes for API serving, PV monitoring, and background task processing, enabling horizontal scaling and fault isolation.
 
-## Technology Stack
-
-| Category | Technology | Purpose |
-|----------|------------|---------|
-| **Framework** | FastAPI 0.109+ | REST API and WebSocket |
-| **Language** | Python 3.11+ | Async/await support |
-| **Database** | PostgreSQL 16+ | Primary data store |
-| **ORM** | SQLAlchemy 2.0+ (async) | Database abstraction |
-| **Cache** | Redis 7+ | PV value caching, pub/sub |
-| **EPICS** | aioca 1.7+ | Async Channel Access |
-| **Task Queue** | Arq | Redis-backed job queue |
-| **Server** | Uvicorn | ASGI server |
+For the full technology stack, see the [README](README.md#technology-stack).
 
 ## System Architecture
+
+![Architecture Diagram](docs/assets/architecture_diagram.png)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -549,9 +540,6 @@ SQUIRREL_WATCHDOG_STALE_THRESHOLD=300.0
 
 # WebSocket
 SQUIRREL_WEBSOCKET_BATCH_INTERVAL_MS=100
-
-# Legacy Mode (embedded monitor in API process)
-SQUIRREL_EMBEDDED_MONITOR=false
 ```
 
 ## Deployment
@@ -571,15 +559,6 @@ This starts:
 - **API** (port 8000) - REST/WebSocket server
 - **Monitor** (1 replica) - PV monitoring
 - **Worker** (2 replicas) - Background task processing
-
-### Legacy Mode
-
-For simpler deployments or backward compatibility:
-
-```bash
-cd docker
-docker-compose --profile legacy up backend db redis
-```
 
 ### Local Development
 

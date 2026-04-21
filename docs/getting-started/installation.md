@@ -19,7 +19,7 @@ docker-compose up -d --build
 docker exec squirrel-api alembic upgrade head
 
 # Create an API key (required to use the API)
-docker exec squirrel-api python script/create_key.py <app-name> [--read] [--write]
+docker exec squirrel-api python -m scripts.create_key <app-name> [--read] [--write]
 ```
 
 !!! warning "Save your token"
@@ -60,24 +60,7 @@ docker compose down
 docker compose down -v
 ```
 
-## Option 2: Legacy Mode (Single Process)
-
-For simpler deployments with embedded PV monitoring:
-
-```bash
-cd docker
-docker compose --profile legacy up backend db redis
-```
-
-This runs the API with embedded PV monitor on port `8001`.
-
-!!! warning "Workers still required"
-    Workers are still required for snapshot creation. Start them separately:
-    ```bash
-    docker compose up -d worker
-    ```
-
-## Option 3: Local Development
+## Option 2: Local Development
 
 Run infrastructure in Docker, services locally for faster development:
 
