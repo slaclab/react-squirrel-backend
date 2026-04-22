@@ -324,3 +324,35 @@ class TestBulkTagImport:
         assert data["groupsCreated"] == 0
         assert data["tagsCreated"] == 0
         assert data["tagsSkipped"] == 0
+
+    @pytest.mark.asyncio
+    async def test_bulk_import_requires_write_access(self, client: AsyncClient):
+        """/v1/tags/bulk rejects keys that lack write access."""
+        from datetime import datetime
+
+        from app.main import app
+        from app.dependencies import get_api_key
+        from app.schemas.api_key import ApiKeyDTO
+
+        async def read_only_key() -> ApiKeyDTO:
+            return ApiKeyDTO(
+                id="read-only-key-id",
+                appName="ReadOnlyClient",
+                isActive=True,
+                readAccess=True,
+                writeAccess=False,
+                createdAt=datetime.now(),
+                updatedAt=datetime.now(),
+            )
+
+        # Temporarily swap in a read-only key; restore the full-access override after.
+        original_override = app.dependency_overrides.get(get_api_key)
+        app.dependency_overrides[get_api_key] = read_only_key
+        try:
+            response = await client.post("/v1/tags/bulk", json={"groups": {}})
+            assert response.status_code == 401
+        finally:
+            if original_override is not None:
+                app.dependency_overrides[get_api_key] = original_override
+            else:
+                app.dependency_overrides.pop(get_api_key, None)

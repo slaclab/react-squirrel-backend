@@ -180,7 +180,7 @@ class BulkTagImportResponse(BaseModel):
     warnings: list[str]
 
 
-@router.post("/bulk")
+@router.post("/bulk", dependencies=[Security(require_write_access)])
 async def bulk_import_tags(
     data: BulkTagImportRequest,
     service: TagServiceDep,
