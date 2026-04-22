@@ -247,3 +247,4 @@ pre-commit run --all-files
 - [Testing](testing.md) - Running and writing tests
 - [Database Migrations](migrations.md) - Managing schema changes
 - [Code Quality](code-quality.md) - Linting and formatting
+- [E-log Plugin](elog-plugin.md) - Writing an adapter for a different e-log backend

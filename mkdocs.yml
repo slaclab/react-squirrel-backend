@@ -62,6 +62,7 @@ plugins:
       enable_creation_date: true
       fallback_to_build_date: true
   - git-committers:
+      enabled: !ENV [MKDOCS_GIT_COMMITTERS_APIKEY, false]
       exclude:
         - index.md
       repository: slaclab/react-squirrel-backend
@@ -114,6 +115,7 @@ nav:
     - Testing: development/testing.md
     - Database Migrations: development/migrations.md
     - Code Quality: development/code-quality.md
+    - E-log Plugin: development/elog-plugin.md
   - API Reference:
     - api-reference/index.md
     - REST Endpoints: api-reference/endpoints.md
