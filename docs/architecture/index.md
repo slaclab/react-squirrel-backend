@@ -6,60 +6,8 @@ The system uses a **distributed architecture** with separate processes for API s
 
 ## System Architecture
 
-![Architecture Diagram](../assets/architecture_diagram.png)
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              Load Balancer                                   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-              ┌───────────────────────┼───────────────────────┐
-              ▼                       ▼                       ▼
-    ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
-    │   API Instance   │   │   API Instance   │   │   API Instance   │
-    │   (squirrel-api) │   │   (squirrel-api) │   │   (squirrel-api) │
-    │   REST + WebSocket│   │   REST + WebSocket│   │   REST + WebSocket│
-    └────────┬─────────┘   └────────┬─────────┘   └────────┬─────────┘
-             │                      │                      │
-             └──────────────────────┼──────────────────────┘
-                                    │
-                                    ▼
-    ┌─────────────────────────────────────────────────────────────────────────┐
-    │                               Redis                                      │
-    │  • PV Value Cache (Hash: pv:values)                                     │
-    │  • Pub/Sub (pv updates, WebSocket broadcasts)                           │
-    │  • Subscription Registry (multi-instance WebSocket support)             │
-    │  • Arq Job Queue                                                        │
-    │  • Monitor Leader Election Lock                                         │
-    └──────────────────────────────┬──────────────────────────────────────────┘
-                                   │
-          ┌────────────────────────┼────────────────────────┐
-          ▼                        ▼                        ▼
-┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│   PV Monitor     │    │   Arq Worker     │    │   Arq Worker     │
-│ (squirrel-monitor)│    │ (squirrel-worker)│    │ (squirrel-worker)│
-│ Single instance  │    │ Scalable         │    │ Scalable         │
-│ Leader election  │    │                  │    │                  │
-└────────┬─────────┘    └────────┬─────────┘    └────────┬─────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-                                 ▼
-    ┌─────────────────────────────────────────────────────────────────────────┐
-    │                            PostgreSQL                                    │
-    │  • PV metadata and configuration                                        │
-    │  • Snapshots and snapshot values                                        │
-    │  • Tags and tag groups                                                  │
-    │  • Job tracking                                                         │
-    └─────────────────────────────────────────────────────────────────────────┘
-                                 │
-                                 ▼
-    ┌─────────────────────────────────────────────────────────────────────────┐
-    │                         EPICS IOCs                                       │
-    │  • 40-50K Process Variables                                             │
-    │  • Channel Access protocol                                              │
-    └─────────────────────────────────────────────────────────────────────────┘
-```
+![System architecture](../assets/figure-1-system-architecture-light.png#only-light)
+![System architecture](../assets/figure-1-system-architecture-dark.png#only-dark)
 
 For the full technology stack, see the [Home](../index.md#technology-stack) page.
 
@@ -150,43 +98,8 @@ squirrel-backend/
 
 ## Database Models
 
-```
-┌──────────────────┐     ┌──────────────────┐
-│       PV         │     │     TagGroup     │
-├──────────────────┤     ├──────────────────┤
-│ setpoint_address │     │ name             │
-│ readback_address │     │ description      │
-│ config_address   │     └────────┬─────────┘
-│ device           │              │
-│ description      │              │ 1:n
-│ abs_tolerance    │              ▼
-│ rel_tolerance    │     ┌──────────────────┐
-└────────┬─────────┘     │       Tag        │
-         │               ├──────────────────┤
-         │ n:m           │ name             │
-         └───────────────│ tag_group_id     │
-                         └──────────────────┘
-
-┌──────────────────┐     ┌──────────────────┐
-│    Snapshot      │     │       Job        │
-├──────────────────┤     ├──────────────────┤
-│ title            │     │ type (enum)      │
-│ comment          │     │ status (enum)    │
-│ created_by       │     │ progress (0-100) │
-└────────┬─────────┘     │ data (JSONB)     │
-         │               │ result_id        │
-         │ 1:n           │ retry_count      │
-         ▼               └──────────────────┘
-┌──────────────────┐
-│  SnapshotValue   │
-├──────────────────┤
-│ pv_name          │
-│ setpoint_value   │
-│ readback_value   │
-│ status           │
-│ severity         │
-└──────────────────┘
-```
+![Data model](../assets/figure-7-data-model-light.png#only-light)
+![Data model](../assets/figure-7-data-model-dark.png#only-dark)
 
 ## Services Layer
 
@@ -203,26 +116,8 @@ squirrel-backend/
 
 ## External Services
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Squirrel Backend Services                     │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐            │
-│  │   API   │  │ Monitor │  │ Worker  │  │ Worker  │            │
-│  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘            │
-└───────┼────────────┼────────────┼────────────┼──────────────────┘
-        │            │            │            │
-        └────────────┼────────────┼────────────┘
-                     │            │
-        ┌────────────┼────────────┼────────────┐
-        ▼            ▼            ▼            ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│   PostgreSQL    │ │     Redis       │ │     EPICS       │
-│   (asyncpg)     │ │   (hiredis)     │ │    (aioca)      │
-├─────────────────┤ ├─────────────────┤ ├─────────────────┤
-│ • PV metadata   │ │ • Value cache   │ │ • Channel Access│
-│ • Snapshots     │ │ • Pub/Sub       │ │ • 40K+ PVs      │
-│ • Tags          │ │ • Job queue     │ │ • Read/Write    │
-│ • Jobs          │ │ • Leader lock   │ │ • Monitor       │
-│                 │ │ • Subscriptions │ │                 │
-└─────────────────┘ └─────────────────┘ └─────────────────┘
-```
+| Service | Driver | Role |
+|---------|--------|------|
+| **PostgreSQL** | asyncpg | PV metadata, snapshots, tags, jobs |
+| **Redis** | hiredis | PV value cache, pub/sub, Arq job queue, monitor leader lock, WebSocket subscription registry |
+| **EPICS** | aioca (CA), p4p (PVA) | Read/write/monitor 40K+ process variables |

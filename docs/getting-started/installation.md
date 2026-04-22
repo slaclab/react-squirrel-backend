@@ -99,13 +99,7 @@ cp .env.example .env
 alembic upgrade head
 ```
 
-### 5. (Optional) Load test data
-
-```bash
-python -m scripts.seed_pvs --count 100
-```
-
-### 6. Start services
+### 5. Start services
 
 In separate terminals:
 
@@ -131,11 +125,9 @@ In separate terminals:
     - **Monitor**: Maintains Redis cache of live PV values
     - **Worker**: Processes background jobs (snapshot creation/restore)
 
-## Loading Data
+## Loading PVs from CSV
 
-### Upload PVs from CSV
-
-The expected format:
+The expected CSV format:
 
 ```csv
 Setpoint,Readback,Region,Area,Subsystem
@@ -143,43 +135,11 @@ FBCK:LNG6:1:BC2ELTOL,,"Feedback-All","LIMITS","FBCK"
 QUAD:LI21:201:BDES,QUAD:LI21:201:BACT,"Cu Linac","LI21","Magnet"
 ```
 
-#### Using the UI
+Upload through the UI:
 
 1. Navigate to the "Browse PVs" page
 2. Click the "Import PVs" button
 3. Select the consolidated CSV
-
-#### Using a bash script
-
-```bash
-# Copy script and data into docker service
-docker cp /path/to/local/upload_csv.py squirrel-api:/tmp/
-docker cp /path/to/local/consolidated.csv squirrel-api:/tmp/
-
-# Dry run (see what would be uploaded)
-docker exec squirrel-api python /tmp/upload_csv.py /tmp/consolidated.csv --dry-run
-
-# Full upload (~36K PVs)
-docker exec squirrel-api python /tmp/upload_csv.py /tmp/consolidated.csv
-
-# With custom batch size
-docker exec squirrel-api python /tmp/upload_csv.py /tmp/consolidated.csv --batch-size 1000
-```
-
-### Seed Test Data
-
-For development/testing with sample data:
-
-```bash
-# Create 1000 test PVs with tags
-python -m scripts.seed_pvs --count 1000
-
-# Create 50K PVs for performance testing
-python -m scripts.seed_pvs --count 50000 --batch-size 5000
-
-# Clear existing data first
-python -m scripts.seed_pvs --count 1000 --clear
-```
 
 ## Docker Commands Reference
 
@@ -215,6 +175,4 @@ docker exec -it squirrel-db psql -U squirrel
 # Run migrations in Docker
 docker exec -it squirrel-api alembic upgrade head
 
-# Load test data in Docker
-docker compose exec api python -m scripts.seed_pvs --count 100
 ```

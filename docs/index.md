@@ -31,7 +31,8 @@ High-performance Python FastAPI backend for EPICS control system snapshot/restor
 
 ## Architecture Overview
 
-![Architecture Diagram](assets/architecture_diagram.png)
+![System architecture](assets/figure-1-system-architecture-light.png#only-light)
+![System architecture](assets/figure-1-system-architecture-dark.png#only-dark)
 
 ## Quick Links
 
