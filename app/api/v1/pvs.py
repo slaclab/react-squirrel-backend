@@ -2,9 +2,19 @@ import os
 import json
 from uuid import UUID
 
-from fastapi import Query, Security, APIRouter
+from fastapi import Query, Security, APIRouter, HTTPException
 
-from app.schemas.pv import LivePVRequest, NewPVElementDTO, UpdatePVElementDTO
+from app.schemas.pv import (
+    PVElementDTO,
+    LivePVRequest,
+    NewPVElementDTO,
+    EpicsTestResponse,
+    UpdatePVElementDTO,
+    CacheStatusResponse,
+    PVCacheEntryResponse,
+    AllLiveValuesResponse,
+    FilteredSearchResponse,
+)
 from app.dependencies import (
     DataBaseDep,
     PVServiceDep,
@@ -13,30 +23,38 @@ from app.dependencies import (
     require_read_access,
     require_write_access,
 )
-from app.api.responses import APIException, success_response
+from app.schemas.common import PagedResult
 from app.repositories.pv_repository import PVRepository
 
 router = APIRouter(prefix="/pvs", tags=["PVs"])
 
 
-@router.get("", dependencies=[Security(require_read_access)])
+@router.get(
+    "",
+    dependencies=[Security(require_read_access)],
+    response_model=list[PVElementDTO],
+)
 async def search_pvs(
     service: PVServiceDep,
     pvName: str | None = Query(None),
-) -> dict:
+) -> list[PVElementDTO]:
     """Search PVs by name (non-paginated, for backward compatibility)."""
     result = await service.search_paged(search=pvName, page_size=1000)
-    return success_response(result.results)
+    return result.results
 
 
-@router.get("/paged", dependencies=[Security(require_read_access)])
+@router.get(
+    "/paged",
+    dependencies=[Security(require_read_access)],
+    response_model=PagedResult[PVElementDTO],
+)
 async def search_pvs_paged(
     service: PVServiceDep,
     pvName: str | None = Query(None),
     pageSize: int = Query(100, ge=1, le=1000),
     continuationToken: str | None = Query(None),
     tagFilters: str | None = Query(None, description="JSON object: {groupId: [tagId1, tagId2], ...}"),
-) -> dict:
+) -> PagedResult[PVElementDTO]:
     """
     Search PVs with pagination and optional tag filtering.
 
@@ -51,73 +69,90 @@ async def search_pvs_paged(
             if not tag_filters:
                 tag_filters = None
         except json.JSONDecodeError as e:
-            raise APIException(400, f"Invalid tagFilters JSON: {e}", 400)
+            raise HTTPException(status_code=400, detail=f"Invalid tagFilters JSON: {e}")
         except ValueError as e:
-            raise APIException(400, str(e), 400)
+            raise HTTPException(status_code=400, detail=str(e))
 
-    result = await service.search_paged(
+    return await service.search_paged(
         search=pvName,
         page_size=pageSize,
         continuation_token=continuationToken,
         tag_filters=tag_filters,
     )
-    return success_response(result)
 
 
-@router.post("", dependencies=[Security(require_write_access)])
-async def create_pv(data: NewPVElementDTO, service: PVServiceDep) -> dict:
+@router.post(
+    "",
+    dependencies=[Security(require_write_access)],
+    response_model=PVElementDTO,
+)
+async def create_pv(data: NewPVElementDTO, service: PVServiceDep) -> PVElementDTO:
     """Create a new PV."""
     try:
-        pv = await service.create(data)
-        return success_response(pv)
+        return await service.create(data)
     except ValueError as e:
-        raise APIException(409, str(e), 409)
+        raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.post("/multi", dependencies=[Security(require_write_access)])
+@router.post(
+    "/multi",
+    dependencies=[Security(require_write_access)],
+    response_model=list[PVElementDTO],
+)
 async def create_multiple_pvs(
     data: list[NewPVElementDTO],
     service: PVServiceDep,
-) -> dict:
+) -> list[PVElementDTO]:
     """Bulk create PVs (for CSV import)."""
     try:
-        pvs = await service.create_many(data)
-        return success_response(pvs)
+        return await service.create_many(data)
     except ValueError as e:
-        raise APIException(409, str(e), 409)
+        raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.put("/{pv_id}", dependencies=[Security(require_write_access)])
+@router.put(
+    "/{pv_id}",
+    dependencies=[Security(require_write_access)],
+    response_model=PVElementDTO,
+)
 async def update_pv(
     pv_id: str,
     data: UpdatePVElementDTO,
     service: PVServiceDep,
-) -> dict:
+) -> PVElementDTO:
     """Update a PV."""
     try:
         UUID(pv_id)
     except ValueError:
-        raise APIException(404, f"PV {pv_id} not found", 404)
+        raise HTTPException(status_code=404, detail=f"PV {pv_id} not found")
     pv = await service.update(pv_id, data)
     if not pv:
-        raise APIException(404, f"PV {pv_id} not found", 404)
-    return success_response(pv)
+        raise HTTPException(status_code=404, detail=f"PV {pv_id} not found")
+    return pv
 
 
-@router.delete("/{pv_id}", dependencies=[Security(require_write_access)])
-async def delete_pv(pv_id: str, service: PVServiceDep) -> dict:
+@router.delete(
+    "/{pv_id}",
+    dependencies=[Security(require_write_access)],
+    response_model=bool,
+)
+async def delete_pv(pv_id: str, service: PVServiceDep) -> bool:
     """Delete a PV."""
     try:
         UUID(pv_id)
     except ValueError:
-        raise APIException(404, f"PV {pv_id} not found", 404)
+        raise HTTPException(status_code=404, detail=f"PV {pv_id} not found")
     success = await service.delete(pv_id)
     if not success:
-        raise APIException(404, f"PV {pv_id} not found", 404)
-    return success_response(True)
+        raise HTTPException(status_code=404, detail=f"PV {pv_id} not found")
+    return True
 
 
-@router.get("/search", dependencies=[Security(require_read_access)])
+@router.get(
+    "/search",
+    dependencies=[Security(require_read_access)],
+    response_model=FilteredSearchResponse,
+)
 async def search_pvs_filtered(
     db: DataBaseDep,
     service: PVServiceDep,
@@ -128,7 +163,7 @@ async def search_pvs_filtered(
     limit: int = Query(100, le=1000, description="Max results"),
     offset: int = Query(0, description="Offset for pagination"),
     include_live_values: bool = Query(False, description="Include Redis cache values"),
-) -> dict:
+) -> FilteredSearchResponse:
     """
     Server-side filtered search with optional live values.
 
@@ -143,9 +178,9 @@ async def search_pvs_filtered(
     # Convert to DTOs
     results = [service._to_dto(pv) for pv in pvs]
 
-    response = {"results": results, "totalCount": total, "limit": limit, "offset": offset}
+    live_values: dict[str, PVCacheEntryResponse] | None = None
+    live_values_error: str | None = None
 
-    # Optionally include live values from Redis
     if include_live_values:
         try:
             pv_addresses = []
@@ -155,87 +190,112 @@ async def search_pvs_filtered(
                 if pv.readback_address:
                     pv_addresses.append(pv.readback_address)
 
-            live_values = await redis.get_pv_values_bulk(pv_addresses)
-            response["liveValues"] = live_values
+            entries = await redis.get_pv_values_bulk(pv_addresses)
+            live_values = {name: PVCacheEntryResponse(**entry.to_dict()) for name, entry in entries.items()}
         except Exception as e:
-            response["liveValuesError"] = str(e)
+            live_values_error = str(e)
 
-    return success_response(response)
+    return FilteredSearchResponse(
+        results=results,
+        totalCount=total,
+        limit=limit,
+        offset=offset,
+        liveValues=live_values,
+        liveValuesError=live_values_error,
+    )
 
 
-@router.get("/devices", dependencies=[Security(require_read_access)])
-async def get_all_devices(db: DataBaseDep) -> dict:
+@router.get(
+    "/devices",
+    dependencies=[Security(require_read_access)],
+    response_model=list[str],
+)
+async def get_all_devices(db: DataBaseDep) -> list[str]:
     """Get all unique device names for filtering."""
     pv_repo = PVRepository(db)
-    devices = await pv_repo.get_all_devices()
-    return success_response(devices)
+    return await pv_repo.get_all_devices()
 
 
-@router.get("/live", dependencies=[Security(require_read_access)])
+@router.get(
+    "/live",
+    dependencies=[Security(require_read_access)],
+    response_model=dict[str, PVCacheEntryResponse],
+)
 async def get_live_values(
     redis: RedisServiceDep,
     pv_names: list[str] = Query(..., description="List of PV names to fetch"),
-) -> dict:
+) -> dict[str, PVCacheEntryResponse]:
     """Get current values from Redis cache (instant)."""
     try:
         entries = await redis.get_pv_values_bulk(pv_names)
-        # Convert PVCacheEntry objects to dicts for JSON serialization
-        values = {pv_name: entry.to_dict() for pv_name, entry in entries.items()}
-        return success_response(values)
+        return {pv_name: PVCacheEntryResponse(**entry.to_dict()) for pv_name, entry in entries.items()}
     except Exception as e:
-        raise APIException(500, f"Failed to get live values: {e}", 500)
+        raise HTTPException(status_code=500, detail=f"Failed to get live values: {e}")
 
 
-@router.post("/live", dependencies=[Security(require_read_access)])
-async def get_live_values_post(request: LivePVRequest, redis: RedisServiceDep) -> dict:
+@router.post(
+    "/live",
+    dependencies=[Security(require_read_access)],
+    response_model=dict[str, PVCacheEntryResponse],
+)
+async def get_live_values_post(request: LivePVRequest, redis: RedisServiceDep) -> dict[str, PVCacheEntryResponse]:
     """Get current values from Redis cache (instant) - POST version for large PV lists."""
     try:
         entries = await redis.get_pv_values_bulk(request.pv_names)
-        # Convert PVCacheEntry objects to dicts for JSON serialization
-        values = {pv_name: entry.to_dict() for pv_name, entry in entries.items()}
-        return success_response(values)
+        return {pv_name: PVCacheEntryResponse(**entry.to_dict()) for pv_name, entry in entries.items()}
     except Exception as e:
-        raise APIException(500, f"Failed to get live values: {e}", 500)
+        raise HTTPException(status_code=500, detail=f"Failed to get live values: {e}")
 
 
-@router.get("/live/all", dependencies=[Security(require_read_access)])
-async def get_all_live_values(redis: RedisServiceDep) -> dict:
+@router.get(
+    "/live/all",
+    dependencies=[Security(require_read_access)],
+    response_model=AllLiveValuesResponse,
+)
+async def get_all_live_values(redis: RedisServiceDep) -> AllLiveValuesResponse:
     """Get all cached PV values (for initial table load)."""
     try:
         values = await redis.get_all_pv_values_as_dict()
-        return success_response({"values": values, "count": len(values)})
+        return AllLiveValuesResponse(
+            values={name: PVCacheEntryResponse(**entry) for name, entry in values.items()},
+            count=len(values),
+        )
     except Exception as e:
-        raise APIException(500, f"Failed to get live values: {e}", 500)
+        raise HTTPException(status_code=500, detail=f"Failed to get live values: {e}")
 
 
-@router.get("/cache/status", dependencies=[Security(require_read_access)])
-async def get_cache_status(redis: RedisServiceDep) -> dict:
+@router.get(
+    "/cache/status",
+    dependencies=[Security(require_read_access)],
+    response_model=CacheStatusResponse,
+)
+async def get_cache_status(redis: RedisServiceDep) -> CacheStatusResponse:
     """Get Redis cache status."""
     try:
         count = await redis.get_cached_pv_count()
-        return success_response({"cachedPvCount": count, "status": "connected"})
+        return CacheStatusResponse(cachedPvCount=count, status="connected")
     except Exception as e:
-        return success_response({"cachedPvCount": 0, "status": "disconnected", "error": str(e)})
+        return CacheStatusResponse(cachedPvCount=0, status="disconnected", error=str(e))
 
 
-@router.get("/test-epics", dependencies=[Security(require_read_access)])
+@router.get(
+    "/test-epics",
+    dependencies=[Security(require_read_access)],
+    response_model=EpicsTestResponse,
+)
 async def test_epics_connection(
     epics: EpicsServiceDep,
-    pv: str = Query(
-        "KLYS:LI22:31:KVAC", description="PV name to test; Defaults to KLYS:LI22:31:KVAC, a SLAC-specific PV"
-    ),
-) -> dict:
+    pv: str = Query("KLYS:LI22:31:KVAC", description="PV name to test"),
+) -> EpicsTestResponse:
     """Test EPICS connectivity using aioca."""
     result = await epics.get_single(pv)
-    return success_response(
-        {
-            "pv": pv,
-            "connected": result.connected,
-            "value": result.value,
-            "error": result.error,
-            "environment": {
-                "EPICS_CA_ADDR_LIST": os.environ.get("EPICS_CA_ADDR_LIST", "NOT SET"),
-                "EPICS_CA_AUTO_ADDR_LIST": os.environ.get("EPICS_CA_AUTO_ADDR_LIST", "NOT SET"),
-            },
-        }
+    return EpicsTestResponse(
+        pv=pv,
+        connected=result.connected,
+        value=result.value,
+        error=result.error,
+        environment={
+            "EPICS_CA_ADDR_LIST": os.environ.get("EPICS_CA_ADDR_LIST", "NOT SET"),
+            "EPICS_CA_AUTO_ADDR_LIST": os.environ.get("EPICS_CA_AUTO_ADDR_LIST", "NOT SET"),
+        },
     )

@@ -12,11 +12,17 @@ from datetime import datetime
 from fastapi import Security, APIRouter, HTTPException
 
 from app.dependencies import RedisServiceDep, require_read_access, require_write_access
-from app.api.responses import success_response
 from app.schemas.health import (
+    StalePVsResponse,
+    HeartbeatResponse,
+    CircuitStatsResponse,
+    CircuitActionResponse,
+    CircuitStatusResponse,
     HealthSummaryResponse,
     MonitorHealthResponse,
     WatchdogStatsResponse,
+    DisconnectedPVsResponse,
+    MonitorProcessStatusResponse,
 )
 from app.services.watchdog import get_watchdog
 from app.services.pv_monitor import get_pv_monitor
@@ -24,8 +30,8 @@ from app.services.pv_monitor import get_pv_monitor
 router = APIRouter(prefix="/health", tags=["Health"])
 
 
-@router.get("/heartbeat")
-async def get_heartbeat(redis: RedisServiceDep) -> dict:
+@router.get("/heartbeat", response_model=HeartbeatResponse)
+async def get_heartbeat(redis: RedisServiceDep) -> HeartbeatResponse:
     """
     Simple heartbeat check for frontend polling.
 
@@ -36,39 +42,37 @@ async def get_heartbeat(redis: RedisServiceDep) -> dict:
     try:
         # Check if Redis is connected
         if not redis.is_connected():
-            return success_response(
-                {
-                    "timestamp": None,
-                    "alive": False,
-                    "age_seconds": None,
-                    "error": "Redis not connected",
-                }
+            return HeartbeatResponse(
+                timestamp=None,
+                alive=False,
+                age_seconds=None,
+                error="Redis not connected",
             )
 
         heartbeat = await redis.get_heartbeat()
         alive = await redis.is_monitor_alive(max_age_seconds=5.0)
         age_seconds = await redis.get_heartbeat_age()
 
-        return success_response(
-            {
-                "timestamp": heartbeat,
-                "alive": alive,
-                "age_seconds": age_seconds,
-            }
+        return HeartbeatResponse(
+            timestamp=heartbeat,
+            alive=alive,
+            age_seconds=age_seconds,
         )
     except Exception as e:
         # Redis not available - monitor is definitely not healthy
-        return success_response(
-            {
-                "timestamp": None,
-                "alive": False,
-                "age_seconds": None,
-                "error": str(e),
-            }
+        return HeartbeatResponse(
+            timestamp=None,
+            alive=False,
+            age_seconds=None,
+            error=str(e),
         )
 
 
-@router.get("/monitor", dependencies=[Security(require_read_access)])
+@router.get(
+    "/monitor",
+    dependencies=[Security(require_read_access)],
+    response_model=MonitorHealthResponse,
+)
 async def get_monitor_health(redis: RedisServiceDep) -> MonitorHealthResponse:
     """
     Get detailed monitor health information.
@@ -108,7 +112,11 @@ async def get_monitor_health(redis: RedisServiceDep) -> MonitorHealthResponse:
         raise HTTPException(status_code=503, detail=f"Health check failed: {e}")
 
 
-@router.get("/watchdog", dependencies=[Security(require_read_access)])
+@router.get(
+    "/watchdog",
+    dependencies=[Security(require_read_access)],
+    response_model=WatchdogStatsResponse,
+)
 async def get_watchdog_stats() -> WatchdogStatsResponse:
     """
     Get watchdog statistics.
@@ -134,7 +142,11 @@ async def get_watchdog_stats() -> WatchdogStatsResponse:
         raise HTTPException(status_code=503, detail=f"Watchdog stats failed: {e}")
 
 
-@router.post("/watchdog/check", dependencies=[Security(require_write_access)])
+@router.post(
+    "/watchdog/check",
+    dependencies=[Security(require_write_access)],
+    response_model=WatchdogStatsResponse,
+)
 async def force_watchdog_check() -> WatchdogStatsResponse:
     """
     Force an immediate watchdog health check.
@@ -161,7 +173,11 @@ async def force_watchdog_check() -> WatchdogStatsResponse:
         raise HTTPException(status_code=503, detail=f"Watchdog check failed: {e}")
 
 
-@router.get("/summary", dependencies=[Security(require_read_access)])
+@router.get(
+    "/summary",
+    dependencies=[Security(require_read_access)],
+    response_model=HealthSummaryResponse,
+)
 async def get_health_summary(redis: RedisServiceDep) -> HealthSummaryResponse:
     """
     Get a complete health summary for monitoring dashboards.
@@ -247,8 +263,12 @@ async def get_health_summary(redis: RedisServiceDep) -> HealthSummaryResponse:
         )
 
 
-@router.get("/disconnected", dependencies=[Security(require_read_access)])
-async def get_disconnected_pvs(redis: RedisServiceDep) -> dict:
+@router.get(
+    "/disconnected",
+    dependencies=[Security(require_read_access)],
+    response_model=DisconnectedPVsResponse,
+)
+async def get_disconnected_pvs(redis: RedisServiceDep) -> DisconnectedPVsResponse:
     """
     Get list of all disconnected PVs.
 
@@ -256,21 +276,21 @@ async def get_disconnected_pvs(redis: RedisServiceDep) -> dict:
     """
     try:
         disconnected = await redis.get_disconnected_pvs()
-
-        return {
-            "count": len(disconnected),
-            "pvs": sorted(list(disconnected)),
-        }
+        return DisconnectedPVsResponse(count=len(disconnected), pvs=sorted(list(disconnected)))
 
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Failed to get disconnected PVs: {e}")
 
 
-@router.get("/stale", dependencies=[Security(require_read_access)])
+@router.get(
+    "/stale",
+    dependencies=[Security(require_read_access)],
+    response_model=StalePVsResponse,
+)
 async def get_stale_pvs(
     redis: RedisServiceDep,
     max_age_seconds: float = 300,
-) -> dict:
+) -> StalePVsResponse:
     """
     Get list of stale PVs (connected but not updated recently).
 
@@ -279,19 +299,18 @@ async def get_stale_pvs(
     """
     try:
         stale = await redis.get_stale_pvs(max_age_seconds=max_age_seconds)
-
-        return {
-            "count": len(stale),
-            "threshold_seconds": max_age_seconds,
-            "pvs": sorted(stale),
-        }
+        return StalePVsResponse(count=len(stale), threshold_seconds=max_age_seconds, pvs=sorted(stale))
 
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Failed to get stale PVs: {e}")
 
 
-@router.get("/circuits", dependencies=[Security(require_read_access)])
-async def get_circuit_breaker_status() -> dict:
+@router.get(
+    "/circuits",
+    dependencies=[Security(require_read_access)],
+    response_model=CircuitStatusResponse,
+)
+async def get_circuit_breaker_status() -> CircuitStatusResponse:
     """
     Get circuit breaker status for all EPICS IOCs.
 
@@ -312,41 +331,43 @@ async def get_circuit_breaker_status() -> dict:
         stats = manager.get_all_stats()
         open_circuits = manager.get_open_circuits()
 
-        return {
-            "open_circuit_count": len(open_circuits),
-            "total_circuits": len(stats),
-            "open_circuits": open_circuits,
-            "circuits": [
-                {
-                    "name": s.name,
-                    "state": s.state.value,
-                    "failure_count": s.failure_count,
-                    "success_count": s.success_count,
-                    "call_count": s.call_count,
-                    "last_failure": s.last_failure.isoformat() if s.last_failure else None,
-                    "opened_at": s.opened_at.isoformat() if s.opened_at else None,
-                }
+        return CircuitStatusResponse(
+            open_circuit_count=len(open_circuits),
+            total_circuits=len(stats),
+            open_circuits=open_circuits,
+            circuits=[
+                CircuitStatsResponse(
+                    name=s.name,
+                    state=s.state.value,
+                    failure_count=s.failure_count,
+                    success_count=s.success_count,
+                    call_count=s.call_count,
+                    last_failure=s.last_failure.isoformat() if s.last_failure else None,
+                    opened_at=s.opened_at.isoformat() if s.opened_at else None,
+                )
                 for s in stats
             ],
-        }
+        )
     except ImportError:
-        return {
-            "error": "Circuit breaker not available",
-            "open_circuit_count": 0,
-            "total_circuits": 0,
-            "circuits": [],
-        }
+        return CircuitStatusResponse(
+            open_circuit_count=0,
+            total_circuits=0,
+            error="Circuit breaker not available",
+        )
     except Exception as e:
-        return {
-            "error": str(e),
-            "open_circuit_count": 0,
-            "total_circuits": 0,
-            "circuits": [],
-        }
+        return CircuitStatusResponse(
+            open_circuit_count=0,
+            total_circuits=0,
+            error=str(e),
+        )
 
 
-@router.post("/circuits/{circuit_name}/close", dependencies=[Security(require_write_access)])
-async def force_close_circuit(circuit_name: str) -> dict:
+@router.post(
+    "/circuits/{circuit_name}/close",
+    dependencies=[Security(require_write_access)],
+    response_model=CircuitActionResponse,
+)
+async def force_close_circuit(circuit_name: str) -> CircuitActionResponse:
     """
     Force close a circuit breaker (allow requests to IOC).
 
@@ -358,13 +379,17 @@ async def force_close_circuit(circuit_name: str) -> dict:
 
         manager = get_circuit_breaker_manager()
         manager.force_close(circuit_name)
-        return {"success": True, "message": f"Circuit '{circuit_name}' forced closed"}
+        return CircuitActionResponse(success=True, message=f"Circuit '{circuit_name}' forced closed")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/circuits/{circuit_name}/open", dependencies=[Security(require_write_access)])
-async def force_open_circuit(circuit_name: str) -> dict:
+@router.post(
+    "/circuits/{circuit_name}/open",
+    dependencies=[Security(require_write_access)],
+    response_model=CircuitActionResponse,
+)
+async def force_open_circuit(circuit_name: str) -> CircuitActionResponse:
     """
     Force open a circuit breaker (block requests to IOC).
 
@@ -376,13 +401,17 @@ async def force_open_circuit(circuit_name: str) -> dict:
 
         manager = get_circuit_breaker_manager()
         manager.force_open(circuit_name)
-        return {"success": True, "message": f"Circuit '{circuit_name}' forced open"}
+        return CircuitActionResponse(success=True, message=f"Circuit '{circuit_name}' forced open")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/monitor/status", dependencies=[Security(require_read_access)])
-async def monitor_process_status(redis: RedisServiceDep) -> dict:
+@router.get(
+    "/monitor/status",
+    dependencies=[Security(require_read_access)],
+    response_model=MonitorProcessStatusResponse,
+)
+async def monitor_process_status(redis: RedisServiceDep) -> MonitorProcessStatusResponse:
     """
     Check if the separate PV Monitor process is alive via Redis heartbeat.
 
@@ -396,44 +425,39 @@ async def monitor_process_status(redis: RedisServiceDep) -> dict:
     """
     try:
         if not redis.is_connected():
-            return {
-                "status": "unknown",
-                "message": "Redis not connected",
-                "age_seconds": None,
-                "leader": None,
-            }
+            return MonitorProcessStatusResponse(
+                status="unknown",
+                message="Redis not connected",
+            )
 
         heartbeat = await redis.get_monitor_heartbeat()
         heartbeat_age = await redis.get_heartbeat_age()
         leader = await redis.get_monitor_lock_holder()
 
         if heartbeat is None:
-            return {
-                "status": "unknown",
-                "message": "No heartbeat found - monitor may not be running",
-                "age_seconds": None,
-                "leader": leader,
-            }
+            return MonitorProcessStatusResponse(
+                status="unknown",
+                message="No heartbeat found - monitor may not be running",
+                leader=leader,
+            )
 
         if heartbeat_age is not None and heartbeat_age > 30:
-            return {
-                "status": "stale",
-                "message": f"Heartbeat is {heartbeat_age:.1f}s old - monitor may be down",
-                "age_seconds": heartbeat_age,
-                "leader": leader,
-            }
+            return MonitorProcessStatusResponse(
+                status="stale",
+                message=f"Heartbeat is {heartbeat_age:.1f}s old - monitor may be down",
+                age_seconds=heartbeat_age,
+                leader=leader,
+            )
 
-        return {
-            "status": "healthy",
-            "message": "Monitor process is alive",
-            "age_seconds": heartbeat_age,
-            "leader": leader,
-        }
+        return MonitorProcessStatusResponse(
+            status="healthy",
+            message="Monitor process is alive",
+            age_seconds=heartbeat_age,
+            leader=leader,
+        )
 
     except Exception as e:
-        return {
-            "status": "error",
-            "message": str(e),
-            "age_seconds": None,
-            "leader": None,
-        }
+        return MonitorProcessStatusResponse(
+            status="error",
+            message=str(e),
+        )

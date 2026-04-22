@@ -15,10 +15,10 @@ _CREATE_PAYLOAD = {"appName": "TestApp", "readAccess": True, "writeAccess": Fals
 async def _create_key(
     client: AsyncClient, app_name: str = "TestApp", *, read: bool = True, write: bool = False
 ) -> dict:
-    """Helper to create an API key and return the response payload."""
+    """Helper to create an API key and return the response body."""
     response = await client.post("/v1/api-keys", json={"appName": app_name, "readAccess": read, "writeAccess": write})
     assert response.status_code == 200
-    return response.json()["payload"]
+    return response.json()
 
 
 # ---------------------------------------------------------------------------
@@ -67,9 +67,7 @@ class TestApiKeyCreate:
         )
 
         assert response.status_code == 409
-        data = response.json()
-        assert data["errorCode"] == 409
-        assert "DuplicateApp" in data["errorMessage"]
+        assert "DuplicateApp" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_create_key_missing_required_field_returns_422(self, client: AsyncClient):
@@ -93,7 +91,7 @@ class TestApiKeyList:
         response = await client.get("/v1/api-keys")
 
         assert response.status_code == 200
-        assert response.json()["payload"] == []
+        assert response.json() == []
 
     @pytest.mark.asyncio
     async def test_list_returns_created_keys(self, client: AsyncClient):
@@ -104,7 +102,7 @@ class TestApiKeyList:
         response = await client.get("/v1/api-keys")
 
         assert response.status_code == 200
-        data = response.json()["payload"]
+        data = response.json()
         assert len(data) == 2
         app_names = {k["appName"] for k in data}
         assert app_names == {"App1", "App2"}
@@ -115,7 +113,7 @@ class TestApiKeyList:
         await _create_key(client)
 
         response = await client.get("/v1/api-keys")
-        data = response.json()["payload"]
+        data = response.json()
 
         for key in data:
             assert "token" not in key
@@ -134,7 +132,7 @@ class TestApiKeyList:
         response = await client.get("/v1/api-keys", params={"active_only": "true"})
 
         assert response.status_code == 200
-        data = response.json()["payload"]
+        data = response.json()
         ids = [k["id"] for k in data]
         assert key1["id"] in ids
         assert key2["id"] not in ids
@@ -148,7 +146,7 @@ class TestApiKeyList:
         response = await client.get("/v1/api-keys")
 
         assert response.status_code == 200
-        data = response.json()["payload"]
+        data = response.json()
         assert any(k["id"] == key["id"] for k in data)
 
 
@@ -166,7 +164,7 @@ class TestApiKeyCount:
         response = await client.get("/v1/api-keys/count")
 
         assert response.status_code == 200
-        assert response.json()["payload"] == 0
+        assert response.json() == 0
 
     @pytest.mark.asyncio
     async def test_count_reflects_created_keys(self, client: AsyncClient):
@@ -177,7 +175,7 @@ class TestApiKeyCount:
         response = await client.get("/v1/api-keys/count")
 
         assert response.status_code == 200
-        assert response.json()["payload"] == 2
+        assert response.json() == 2
 
     @pytest.mark.asyncio
     async def test_count_active_only_excludes_inactive(self, client: AsyncClient):
@@ -189,7 +187,7 @@ class TestApiKeyCount:
         response = await client.get("/v1/api-keys/count", params={"active_only": "true"})
 
         assert response.status_code == 200
-        assert response.json()["payload"] == 1
+        assert response.json() == 1
 
     @pytest.mark.asyncio
     async def test_count_total_includes_inactive(self, client: AsyncClient):
@@ -200,7 +198,7 @@ class TestApiKeyCount:
         response = await client.get("/v1/api-keys/count")
 
         assert response.status_code == 200
-        assert response.json()["payload"] == 1
+        assert response.json() == 1
 
 
 # ---------------------------------------------------------------------------
@@ -220,7 +218,7 @@ class TestApiKeyDeactivate:
         response = await client.delete(f"/v1/api-keys/{key_id}")
 
         assert response.status_code == 200
-        data = response.json()["payload"]
+        data = response.json()
         assert data["id"] == key_id
         assert data["isActive"] is False
 
@@ -231,7 +229,7 @@ class TestApiKeyDeactivate:
         await client.delete(f"/v1/api-keys/{key['id']}")
 
         response = await client.get("/v1/api-keys")
-        data = response.json()["payload"]
+        data = response.json()
 
         deactivated = next((k for k in data if k["id"] == key["id"]), None)
         assert deactivated is not None
@@ -243,8 +241,6 @@ class TestApiKeyDeactivate:
         response = await client.delete("/v1/api-keys/00000000-0000-0000-0000-000000000000")
 
         assert response.status_code == 404
-        data = response.json()
-        assert data["errorCode"] == 404
 
     @pytest.mark.asyncio
     async def test_deactivate_already_inactive_key_returns_409(self, client: AsyncClient):
@@ -256,8 +252,6 @@ class TestApiKeyDeactivate:
         response = await client.delete(f"/v1/api-keys/{key['id']}")
 
         assert response.status_code == 409
-        data = response.json()
-        assert data["errorCode"] == 409
 
     @pytest.mark.asyncio
     async def test_deactivate_allows_reuse_of_app_name(self, client: AsyncClient):
@@ -270,6 +264,6 @@ class TestApiKeyDeactivate:
         )
 
         assert response.status_code == 200
-        new_key = response.json()["payload"]
+        new_key = response.json()
         assert new_key["id"] != key["id"]
         assert new_key["isActive"] is True

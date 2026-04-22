@@ -1,12 +1,11 @@
 from typing import Annotated
 
-from fastapi import Depends, Security, WebSocket, status
+from fastapi import Depends, Security, WebSocket, HTTPException, status
 from fastapi.security import APIKeyHeader
 from fastapi.exceptions import WebSocketException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.api.responses import APIException
 from app.schemas.api_key import ApiKeyDTO
 from app.services.pv_service import PVService
 from app.services.job_service import JobService
@@ -80,30 +79,27 @@ async def get_api_key(
         if api_key_dto and api_key_dto.isActive:
             return api_key_dto
 
-    raise APIException(
-        error_code=status.HTTP_401_UNAUTHORIZED,
-        message="Missing or deactivated API key",
+    raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Missing or deactivated API key",
     )
 
 
 def require_read_access(api_key_dto: Annotated[ApiKeyDTO, Security(get_api_key)]):
     """Dependency that requires a valid, active API Key with read access."""
     if not api_key_dto.readAccess:
-        raise APIException(
-            error_code=status.HTTP_401_UNAUTHORIZED,
-            message="API key does not have read access",
+        raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key does not have read access",
         )
 
 
 def require_write_access(api_key_dto: Annotated[ApiKeyDTO, Security(get_api_key)]):
     """Dependency that requires a valid, active API Key with write access."""
     if not api_key_dto.writeAccess:
-        raise APIException(
-            error_code=status.HTTP_401_UNAUTHORIZED,
-            message="API key does not have write access",
+        raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key does not have write access",
         )
 
 
