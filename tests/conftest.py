@@ -151,7 +151,7 @@ async def sample_tag_group(client: AsyncClient) -> dict:
     """Create a sample tag group for testing."""
     response = await client.post("/v1/tags", json={"name": "Test Location", "description": "Test location tags"})
     assert response.status_code == 200
-    return response.json()["payload"]
+    return response.json()
 
 
 @pytest_asyncio.fixture
@@ -162,7 +162,7 @@ async def sample_tag(client: AsyncClient, sample_tag_group: dict) -> tuple[dict,
         f"/v1/tags/{group_id}/tags", json={"name": "Building-A", "description": "Building A location"}
     )
     assert response.status_code == 200
-    group = response.json()["payload"]["group"]
+    group = response.json()["group"]
     tag = group["tags"][0]
     return group, tag
 
@@ -183,7 +183,7 @@ async def sample_pv(client: AsyncClient) -> dict:
         },
     )
     assert response.status_code == 200
-    return response.json()["payload"]
+    return response.json()
 
 
 @pytest_asyncio.fixture
@@ -203,7 +203,7 @@ async def sample_pvs(client: AsyncClient) -> list[dict]:
     ]
     response = await client.post("/v1/pvs/multi", json=pvs_data)
     assert response.status_code == 200
-    return response.json()["payload"]
+    return response.json()
 
 
 @pytest_asyncio.fixture
@@ -222,4 +222,4 @@ async def sample_snapshot(client: AsyncClient, sample_pvs: list[dict], mock_epic
         json={"title": "Test Snapshot", "description": "Snapshot for unit tests"},
     )
     assert response.status_code == 200
-    return response.json()["payload"]
+    return response.json()

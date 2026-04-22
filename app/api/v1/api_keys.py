@@ -1,62 +1,56 @@
 """API endpoints for API key management."""
-from fastapi import Depends, APIRouter, status
+from fastapi import Depends, APIRouter, HTTPException, status
 
 from app.dependencies import (
     get_api_key_service,
     require_read_access,
     require_write_access,
 )
-from app.api.responses import APIException
-from app.schemas.common import ApiResultResponse
-from app.schemas.api_key import ApiKeyCreateDTO
+from app.schemas.api_key import ApiKeyDTO, ApiKeyCreateDTO, ApiKeyCreateResultDTO
 from app.services.api_key_service import ApiKeyService
 
 router = APIRouter(prefix="/api-keys", tags=["ApiKeys"])
 
 
-@router.get("", dependencies=[Depends(require_read_access)])
+@router.get("", dependencies=[Depends(require_read_access)], response_model=list[ApiKeyDTO])
 async def list_all_keys(
     active_only: bool = False,
     service: ApiKeyService = Depends(get_api_key_service),
-) -> ApiResultResponse:
+) -> list[ApiKeyDTO]:
     """List all API Keys, optionally filtered by active status."""
-    keys = await service.list_keys(active_only)
-    return ApiResultResponse(errorCode=0, errorMessage=None, payload=keys)
+    return await service.list_keys(active_only)
 
 
-@router.post("", dependencies=[Depends(require_write_access)])
+@router.post("", dependencies=[Depends(require_write_access)], response_model=ApiKeyCreateResultDTO)
 async def create_api_key(
     data: ApiKeyCreateDTO,
     service: ApiKeyService = Depends(get_api_key_service),
-) -> ApiResultResponse:
+) -> ApiKeyCreateResultDTO:
     """Create a new API Key."""
     try:
-        new_key = await service.create_key(data)
-        return ApiResultResponse(errorCode=0, errorMessage=None, payload=new_key)
+        return await service.create_key(data)
     except ValueError as e:
-        raise APIException(status.HTTP_409_CONFLICT, str(e), status_code=status.HTTP_409_CONFLICT)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-@router.delete("/{key_id}", dependencies=[Depends(require_write_access)])
+@router.delete("/{key_id}", dependencies=[Depends(require_write_access)], response_model=ApiKeyDTO)
 async def deactivate_api_key(
     key_id: str,
     service: ApiKeyService = Depends(get_api_key_service),
-) -> ApiResultResponse:
+) -> ApiKeyDTO:
     """Deactivate an API Key by ID."""
     try:
-        deactivated_key = await service.deactivate_key(key_id)
+        return await service.deactivate_key(key_id)
     except LookupError as e:
-        raise APIException(status.HTTP_404_NOT_FOUND, str(e), status_code=status.HTTP_404_NOT_FOUND)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
-        raise APIException(status.HTTP_409_CONFLICT, str(e), status_code=status.HTTP_409_CONFLICT)
-    return ApiResultResponse(errorCode=0, errorMessage=None, payload=deactivated_key)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-@router.get("/count", dependencies=[Depends(require_read_access)])
+@router.get("/count", dependencies=[Depends(require_read_access)], response_model=int)
 async def get_api_key_count(
     active_only: bool = False,
     service: ApiKeyService = Depends(get_api_key_service),
-) -> ApiResultResponse:
+) -> int:
     """Get the current number of API Keys."""
-    count = await service.get_count(active_only)
-    return ApiResultResponse(errorCode=0, errorMessage=None, payload=count)
+    return await service.get_count(active_only)
