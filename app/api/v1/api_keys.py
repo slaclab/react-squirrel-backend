@@ -1,7 +1,11 @@
 """API endpoints for API key management."""
 from fastapi import Depends, APIRouter, status
 
-from app.dependencies import get_api_key_service, require_read_access, require_write_access
+from app.dependencies import (
+    get_api_key_service,
+    require_read_access,
+    require_write_access,
+)
 from app.api.responses import APIException
 from app.schemas.common import ApiResultResponse
 from app.schemas.api_key import ApiKeyCreateDTO

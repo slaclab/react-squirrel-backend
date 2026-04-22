@@ -11,8 +11,8 @@ from app.schemas.api_key import ApiKeyDTO
 from app.services.pv_service import PVService
 from app.services.job_service import JobService
 from app.services.tag_service import TagService
-from app.services.redis_service import get_redis_service
 from app.services.epics_service import EpicsService, get_epics_service
+from app.services.redis_service import get_redis_service
 from app.services.api_key_service import ApiKeyService
 from app.services.snapshot_service import SnapshotService
 
