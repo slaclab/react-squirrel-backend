@@ -9,17 +9,17 @@ The easiest way to get started with the full distributed architecture:
 ```bash
 # Clone the repository
 git clone https://github.com/slaclab/react-squirrel-backend.git
-cd react-squirrel-backend
+cd react-squirrel-backend/docker
 
-# Start the full stack
-cd docker
-docker-compose up -d --build
+# Configure environment (EPICS network, Redis password, etc.)
+cp .env.example .env
+# Edit .env if you need to reach EPICS servers outside localhost
 
-# Configure the database
-docker exec squirrel-api alembic upgrade head
+# Start the full stack (migrations run automatically via entrypoint.sh)
+docker compose up -d --build
 
 # Create an API key (required to use the API)
-docker exec squirrel-api python script/create_key.py <app-name> [--read] [--write]
+docker exec squirrel-api python -m scripts.create_key <app-name> [--read] [--write]
 ```
 
 !!! warning "Save your token"
@@ -60,24 +60,7 @@ docker compose down
 docker compose down -v
 ```
 
-## Option 2: Legacy Mode (Single Process)
-
-For simpler deployments with embedded PV monitoring:
-
-```bash
-cd docker
-docker compose --profile legacy up backend db redis
-```
-
-This runs the API with embedded PV monitor on port `8001`.
-
-!!! warning "Workers still required"
-    Workers are still required for snapshot creation. Start them separately:
-    ```bash
-    docker compose up -d worker
-    ```
-
-## Option 3: Local Development
+## Option 2: Local Development
 
 Run infrastructure in Docker, services locally for faster development:
 
@@ -116,13 +99,7 @@ cp .env.example .env
 alembic upgrade head
 ```
 
-### 5. (Optional) Load test data
-
-```bash
-python -m scripts.seed_pvs --count 100
-```
-
-### 6. Start services
+### 5. Start services
 
 In separate terminals:
 
@@ -148,11 +125,9 @@ In separate terminals:
     - **Monitor**: Maintains Redis cache of live PV values
     - **Worker**: Processes background jobs (snapshot creation/restore)
 
-## Loading Data
+## Loading PVs from CSV
 
-### Upload PVs from CSV
-
-The expected format:
+The expected CSV format:
 
 ```csv
 Setpoint,Readback,Region,Area,Subsystem
@@ -160,43 +135,11 @@ FBCK:LNG6:1:BC2ELTOL,,"Feedback-All","LIMITS","FBCK"
 QUAD:LI21:201:BDES,QUAD:LI21:201:BACT,"Cu Linac","LI21","Magnet"
 ```
 
-#### Using the UI
+Upload through the UI:
 
 1. Navigate to the "Browse PVs" page
 2. Click the "Import PVs" button
 3. Select the consolidated CSV
-
-#### Using a bash script
-
-```bash
-# Copy script and data into docker service
-docker cp /path/to/local/upload_csv.py squirrel-api:/tmp/
-docker cp /path/to/local/consolidated.csv squirrel-api:/tmp/
-
-# Dry run (see what would be uploaded)
-docker exec squirrel-api python /tmp/upload_csv.py /tmp/consolidated.csv --dry-run
-
-# Full upload (~36K PVs)
-docker exec squirrel-api python /tmp/upload_csv.py /tmp/consolidated.csv
-
-# With custom batch size
-docker exec squirrel-api python /tmp/upload_csv.py /tmp/consolidated.csv --batch-size 1000
-```
-
-### Seed Test Data
-
-For development/testing with sample data:
-
-```bash
-# Create 1000 test PVs with tags
-python -m scripts.seed_pvs --count 1000
-
-# Create 50K PVs for performance testing
-python -m scripts.seed_pvs --count 50000 --batch-size 5000
-
-# Clear existing data first
-python -m scripts.seed_pvs --count 1000 --clear
-```
 
 ## Docker Commands Reference
 
@@ -232,6 +175,4 @@ docker exec -it squirrel-db psql -U squirrel
 # Run migrations in Docker
 docker exec -it squirrel-api alembic upgrade head
 
-# Load test data in Docker
-docker compose exec api python -m scripts.seed_pvs --count 100
 ```

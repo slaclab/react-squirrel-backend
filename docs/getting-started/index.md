@@ -36,7 +36,7 @@ docker compose up --build
 All endpoints require authentication. Create your first key using the management script:
 
 ```bash
-docker exec squirrel-api python scripts/create_key <app-name> [--read] [--write]
+docker exec squirrel-api python -m scripts.create_key <app-name> [--read] [--write]
 ```
 
 !!! warning "Save your token"
@@ -57,15 +57,6 @@ docker exec squirrel-api python scripts/create_key <app-name> [--read] [--write]
 | `squirrel-redis` | Redis cache/queue (port 6379) |
 | `squirrel-monitor` | EPICS PV monitoring service |
 | `squirrel-worker-1` & `squirrel-worker-2` | Background job processors |
-
-### Load Test Data
-
-```bash
-# In a new terminal
-docker compose exec api python -m scripts.seed_pvs --count 100
-```
-
-This creates 100 test PVs with tags. Now you can test snapshots!
 
 ### View Logs
 
@@ -104,10 +95,7 @@ cd ..
 # 3. Run migrations
 alembic upgrade head
 
-# 4. Load test data
-python -m scripts.seed_pvs --count 100
-
-# 5. Start services (each in a separate terminal)
+# 4. Start services (each in a separate terminal)
 uvicorn app.main:app --reload --port 8000      # Terminal 1: API
 python -m app.monitor_main                      # Terminal 2: Monitor
 arq app.worker.WorkerSettings                   # Terminal 3: Worker
@@ -141,10 +129,7 @@ docker exec -it squirrel-api alembic upgrade head
 
 ### Snapshots are empty
 
-This is normal! Test PVs don't exist on a real EPICS network. To test with real data:
-
-1. Upload real PV addresses via CSV: `python -m scripts.upload_csv your_pvs.csv`
-2. Make sure your EPICS network is accessible from Docker
+This is normal when no PVs exist on your EPICS network. Make sure your EPICS network is reachable from Docker and that PVs have been loaded via the UI's "Import PVs" flow.
 
 ### Worker not running
 

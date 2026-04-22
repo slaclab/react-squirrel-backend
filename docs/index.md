@@ -5,7 +5,7 @@ High-performance Python FastAPI backend for EPICS control system snapshot/restor
 ## Features
 
 - **Distributed Architecture** - Separate processes for API, PV monitoring, and background tasks
-- **Fast Snapshot Creation** - Parallel EPICS reads or instant Redis cache reads (<5s for 40K PVs)
+- **Fast Snapshot Creation** - Instant Redis cache reads (<5s for 40K PVs)
 - **Efficient Restore Operations** - Parallel EPICS writes for quick machine state restoration
 - **Real-Time Updates** - WebSocket streaming with diff-based updates and multi-instance support
 - **Tag-based Organization** - Group and categorize PVs using hierarchical tags
@@ -25,34 +25,14 @@ High-performance Python FastAPI backend for EPICS control system snapshot/restor
 | ORM | SQLAlchemy 2.0 (async) |
 | Cache/Queue | Redis 7+ |
 | Task Queue | Arq |
-| EPICS | aioca (async Channel Access) |
+| EPICS | aioca (async Channel Access), P4P (PVAccess)|
 | Migrations | Alembic |
 | Validation | Pydantic v2 |
 
 ## Architecture Overview
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   API Server    │     │   PV Monitor    │     │   Arq Worker    │
-│  (squirrel-api) │     │(squirrel-monitor)│    │(squirrel-worker)│
-│  REST/WebSocket │     │  EPICS → Redis  │     │  Snapshot jobs  │
-└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-                    ┌────────────┴────────────┐
-                    ▼                         ▼
-            ┌─────────────┐           ┌─────────────┐
-            │    Redis    │           │  PostgreSQL │
-            │ Cache/Queue │           │   Storage   │
-            └─────────────┘           └─────────────┘
-                    │
-                    ▼
-            ┌─────────────┐
-            │  EPICS IOCs │
-            │  40-50K PVs │
-            └─────────────┘
-```
+![System architecture](assets/figure-1-system-architecture-light.png#only-light)
+![System architecture](assets/figure-1-system-architecture-dark.png#only-dark)
 
 ## Quick Links
 
