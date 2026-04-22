@@ -567,7 +567,7 @@ DELETE /v1/tags/{group_id}/tags/{tag_id}
 POST /v1/tags/bulk
 ```
 
-Import multiple tag groups and tags in one call, with duplicate handling.
+Requires `write_access`. Import multiple tag groups and tags in one call, with duplicate handling.
 
 **Request Body:**
 

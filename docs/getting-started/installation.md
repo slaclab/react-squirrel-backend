@@ -9,14 +9,14 @@ The easiest way to get started with the full distributed architecture:
 ```bash
 # Clone the repository
 git clone https://github.com/slaclab/react-squirrel-backend.git
-cd react-squirrel-backend
+cd react-squirrel-backend/docker
 
-# Start the full stack
-cd docker
-docker-compose up -d --build
+# Configure environment (EPICS network, Redis password, etc.)
+cp .env.example .env
+# Edit .env if you need to reach EPICS servers outside localhost
 
-# Configure the database
-docker exec squirrel-api alembic upgrade head
+# Start the full stack (migrations run automatically via entrypoint.sh)
+docker compose up -d --build
 
 # Create an API key (required to use the API)
 docker exec squirrel-api python -m scripts.create_key <app-name> [--read] [--write]

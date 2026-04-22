@@ -32,8 +32,7 @@ High-performance Python FastAPI backend for EPICS control system snapshot/restor
 git clone https://github.com/slaclab/react-squirrel-backend.git
 cd react-squirrel-backend/docker
 cp .env.example .env              # edit for your EPICS network if needed
-docker compose up -d --build
-docker exec squirrel-api alembic upgrade head
+docker compose up -d --build     # migrations run automatically
 docker exec squirrel-api python -m scripts.create_key my-app --read --write
 ```
 

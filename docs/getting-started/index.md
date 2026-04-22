@@ -36,7 +36,7 @@ docker compose up --build
 All endpoints require authentication. Create your first key using the management script:
 
 ```bash
-docker exec squirrel-api python scripts/create_key <app-name> [--read] [--write]
+docker exec squirrel-api python -m scripts.create_key <app-name> [--read] [--write]
 ```
 
 !!! warning "Save your token"
