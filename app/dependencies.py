@@ -9,7 +9,9 @@ from app.db.session import get_db
 from app.api.responses import APIException
 from app.schemas.api_key import ApiKeyDTO
 from app.services.pv_service import PVService
+from app.services.job_service import JobService
 from app.services.tag_service import TagService
+from app.services.redis_service import get_redis_service
 from app.services.epics_service import EpicsService, get_epics_service
 from app.services.api_key_service import ApiKeyService
 from app.services.snapshot_service import SnapshotService
@@ -30,13 +32,23 @@ def get_pv_service(db: AsyncSession = Depends(get_db)) -> PVService:
 def get_snapshot_service(
     db: AsyncSession = Depends(get_db), epics: EpicsService = Depends(get_epics_service)
 ) -> SnapshotService:
-    """Get Snapshot service instance."""
-    return SnapshotService(db, epics)
+    """Get Snapshot service instance (Redis attached from the module singleton)."""
+    return SnapshotService(db, epics, get_redis_service())
 
 
 def get_tag_service(db: AsyncSession = Depends(get_db)) -> TagService:
     """Get Tag service instance."""
     return TagService(db)
+
+
+def get_api_key_service(db: AsyncSession = Depends(get_db)) -> ApiKeyService:
+    """Get API key service instance."""
+    return ApiKeyService(db)
+
+
+def get_job_service(db: AsyncSession = Depends(get_db)) -> JobService:
+    """Get Job service instance."""
+    return JobService(db)
 
 
 # ---------------------------------------------------------------------------
