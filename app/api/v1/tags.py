@@ -145,7 +145,7 @@ class BulkTagImportResponse(BaseModel):
     warnings: list[str]
 
 
-@router.post("/bulk", response_model=dict)
+@router.post("/bulk", dependencies=[Security(require_write_access)], response_model=dict)
 async def bulk_import_tags(data: BulkTagImportRequest, db: AsyncSession = Depends(get_db)):
     """Bulk import tags with duplicate handling."""
     service = TagService(db)
