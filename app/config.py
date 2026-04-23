@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     # Performance
     bulk_insert_batch_size: int = 5000
 
+    # E-log integration (plugin-based)
+    elog_provider: str = ""  # Key into app.services.elog.ELOG_PROVIDERS; empty = disabled
+    elog_proxy_url: str = ""  # Outbound proxy for e-log calls (control-room gateways)
+    elog_default_logbooks: list[str] = []  # Pre-selected logbook IDs in the post dialog
+
+    # elog-plus adapter
+    elog_plus_base_url: str = ""
+    elog_plus_token: str = ""  # Service JWT / application token
+    elog_plus_auth_header: str = "x-vouch-idp-accesstoken"
+
     class Config:
         env_file = ".env"
         env_prefix = "SQUIRREL_"

@@ -114,6 +114,7 @@ nav:
     - Testing: development/testing.md
     - Database Migrations: development/migrations.md
     - Code Quality: development/code-quality.md
+    - E-log Plugin: development/elog-plugin.md
   - API Reference:
     - api-reference/index.md
     - REST Endpoints: api-reference/endpoints.md

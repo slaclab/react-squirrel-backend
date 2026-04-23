@@ -1,3 +1,4 @@
+from typing import Any
 from datetime import datetime
 
 from pydantic import Field, BaseModel, model_validator
@@ -56,3 +57,54 @@ class LivePVRequest(BaseModel):
     """DTO for requesting live PV values via POST."""
 
     pv_names: list[str] = Field(..., description="List of PV names to fetch")
+
+
+class PVCacheEntryResponse(BaseModel):
+    """Single PV cache entry as returned by live-value endpoints."""
+
+    model_config = {"extra": "allow"}  # accept any extra metadata fields
+
+    value: Any | None = None
+    connected: bool = False
+    updated_at: float | None = None
+    status: str | None = None
+    severity: int | None = None
+    timestamp: float | None = None
+    units: str | None = None
+    error: str | None = None
+
+
+class FilteredSearchResponse(BaseModel):
+    """Response from GET /v1/pvs/search."""
+
+    results: list[PVElementDTO]
+    totalCount: int
+    limit: int
+    offset: int
+    liveValues: dict[str, PVCacheEntryResponse] | None = None
+    liveValuesError: str | None = None
+
+
+class AllLiveValuesResponse(BaseModel):
+    """Response from GET /v1/pvs/live/all."""
+
+    values: dict[str, PVCacheEntryResponse]
+    count: int
+
+
+class CacheStatusResponse(BaseModel):
+    """Response from GET /v1/pvs/cache/status."""
+
+    cachedPvCount: int
+    status: str  # "connected" | "disconnected"
+    error: str | None = None
+
+
+class EpicsTestResponse(BaseModel):
+    """Response from GET /v1/pvs/test-epics."""
+
+    pv: str
+    connected: bool
+    value: Any | None = None
+    error: str | None = None
+    environment: dict[str, str]

@@ -2,7 +2,7 @@ import logging
 from uuid import UUID
 
 from arq import create_pool
-from fastapi import Query, Depends, Security, APIRouter, BackgroundTasks
+from fastapi import Query, Depends, Security, APIRouter, HTTPException, BackgroundTasks
 from arq.connections import RedisSettings
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,12 +10,22 @@ from app.config import get_settings
 from app.db.session import get_db
 from app.models.job import JobType
 from app.schemas.job import JobCreatedDTO
-from app.dependencies import require_read_access, require_write_access
-from app.api.responses import APIException, success_response
-from app.schemas.snapshot import NewSnapshotDTO, RestoreRequestDTO, UpdateSnapshotDTO
+from app.dependencies import (
+    get_job_service,
+    require_read_access,
+    get_snapshot_service,
+    require_write_access,
+)
+from app.schemas.snapshot import (
+    SnapshotDTO,
+    NewSnapshotDTO,
+    RestoreResultDTO,
+    RestoreRequestDTO,
+    UpdateSnapshotDTO,
+    SnapshotSummaryDTO,
+    ComparisonResultDTO,
+)
 from app.services.job_service import JobService
-from app.services.epics_service import EpicsService, get_epics_service
-from app.services.redis_service import get_redis_service
 from app.services.background_tasks import run_snapshot_restore, run_snapshot_creation
 from app.services.snapshot_service import SnapshotService
 
@@ -41,28 +51,32 @@ async def get_arq_pool():
     return _arq_pool
 
 
-@router.get("", dependencies=[Security(require_read_access)])
+@router.get(
+    "",
+    dependencies=[Security(require_read_access)],
+    response_model=list[SnapshotSummaryDTO],
+)
 async def list_snapshots(
     title: str | None = Query(None),
     tags: list[str]
     | None = Query(None, description="Filter by tag IDs (returns snapshots containing PVs with any of these tags)"),
-    db: AsyncSession = Depends(get_db),
-    epics: EpicsService = Depends(get_epics_service),
-) -> dict:
+    service: SnapshotService = Depends(get_snapshot_service),
+) -> list[SnapshotSummaryDTO]:
     """List all snapshots, optionally filtered by title and/or tags."""
-    service = SnapshotService(db, epics)
-    snapshots = await service.list_snapshots(title=title, tag_ids=tags)
-    return success_response(snapshots)
+    return await service.list_snapshots(title=title, tag_ids=tags)
 
 
-@router.get("/{snapshot_id}", dependencies=[Security(require_read_access)])
+@router.get(
+    "/{snapshot_id}",
+    dependencies=[Security(require_read_access)],
+    response_model=SnapshotDTO,
+)
 async def get_snapshot(
     snapshot_id: str,
     limit: int | None = Query(None, description="Limit number of PV values returned"),
     offset: int = Query(0, description="Offset for pagination"),
-    db: AsyncSession = Depends(get_db),
-    epics: EpicsService = Depends(get_epics_service),
-) -> dict:
+    service: SnapshotService = Depends(get_snapshot_service),
+) -> SnapshotDTO:
     """
     Get snapshot by ID with values.
 
@@ -72,15 +86,18 @@ async def get_snapshot(
     try:
         UUID(snapshot_id)
     except ValueError:
-        raise APIException(404, f"Snapshot {snapshot_id} not found", 404)
-    service = SnapshotService(db, epics)
+        raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id} not found")
     snapshot = await service.get_by_id(snapshot_id, limit=limit, offset=offset)
     if not snapshot:
-        raise APIException(404, f"Snapshot {snapshot_id} not found", 404)
-    return success_response(snapshot)
+        raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id} not found")
+    return snapshot
 
 
-@router.post("", dependencies=[Security(require_write_access)])
+@router.post(
+    "",
+    dependencies=[Security(require_write_access)],
+    response_model=JobCreatedDTO | SnapshotSummaryDTO,
+)
 async def create_snapshot(
     data: NewSnapshotDTO,
     background_tasks: BackgroundTasks,
@@ -88,8 +105,9 @@ async def create_snapshot(
     async_mode: bool = Query(True, alias="async", description="Run snapshot creation in background"),
     use_cache: bool = Query(True, description="Read from Redis cache (instant) vs direct EPICS read"),
     use_arq: bool = Query(True, description="Use Arq persistent queue (recommended) vs FastAPI BackgroundTasks"),
-    epics: EpicsService = Depends(get_epics_service),
-) -> dict:
+    service: SnapshotService = Depends(get_snapshot_service),
+    job_service: JobService = Depends(get_job_service),
+) -> JobCreatedDTO | SnapshotSummaryDTO:
     """
     Create a new snapshot by reading all PVs.
 
@@ -100,13 +118,12 @@ async def create_snapshot(
     - use_arq=true (default): Use Arq persistent queue (survives restarts)
     - use_arq=false: Use FastAPI BackgroundTasks (lost on restart)
 
-    By default (async=true), this returns immediately with a job ID that can be
-    polled for status. Set async=false for synchronous operation (may timeout
-    for large numbers of PVs).
+    By default (async=true), this returns immediately with a JobCreatedDTO that can be
+    polled for status. Set async=false for synchronous operation — the response is
+    the completed SnapshotSummaryDTO (may timeout for large numbers of PVs).
     """
     if async_mode:
         # Create a job record
-        job_service = JobService(db)
         job = await job_service.create_job(
             JobType.SNAPSHOT_CREATE,
             job_data={"title": data.title, "description": data.description, "use_cache": use_cache},
@@ -129,12 +146,10 @@ async def create_snapshot(
                         use_cache=use_cache,
                     )
                     logger.info(f"Enqueued snapshot job to Arq: {job.id}")
-                    return success_response(
-                        JobCreatedDTO(
-                            jobId=job.id,
-                            message=f"Snapshot creation queued for '{data.title}'"
-                            + (" (from cache)" if use_cache else " (direct EPICS)"),
-                        )
+                    return JobCreatedDTO(
+                        jobId=job.id,
+                        message=f"Snapshot creation queued for '{data.title}'"
+                        + (" (from cache)" if use_cache else " (direct EPICS)"),
                     )
                 except Exception as e:
                     logger.warning(f"Failed to enqueue to Arq, falling back to BackgroundTasks: {e}")
@@ -143,36 +158,29 @@ async def create_snapshot(
         background_tasks.add_task(run_snapshot_creation, job.id, data.title, data.description, use_cache)
         logger.info(f"Scheduled snapshot job via BackgroundTasks: {job.id}")
 
-        return success_response(
-            JobCreatedDTO(
-                jobId=job.id,
-                message=f"Snapshot creation started for '{data.title}'"
-                + (" (from cache)" if use_cache else " (direct EPICS)"),
-            )
+        return JobCreatedDTO(
+            jobId=job.id,
+            message=f"Snapshot creation started for '{data.title}'"
+            + (" (from cache)" if use_cache else " (direct EPICS)"),
         )
     else:
         # Synchronous mode (legacy behavior)
-        redis = get_redis_service()
-        service = SnapshotService(db, epics, redis)
-
         if use_cache:
-            snapshot = await service.create_snapshot_from_cache(data)
-        else:
-            snapshot = await service.create_snapshot(data)
-
-        return success_response(snapshot)
+            return await service.create_snapshot_from_cache(data)
+        return await service.create_snapshot(data)
 
 
-@router.put("/{snapshot_id}", dependencies=[Security(require_write_access)])
+@router.put(
+    "/{snapshot_id}",
+    dependencies=[Security(require_write_access)],
+    response_model=SnapshotSummaryDTO,
+)
 async def update_snapshot(
     snapshot_id: str,
     data: UpdateSnapshotDTO,
-    db: AsyncSession = Depends(get_db),
-) -> dict:
+    service: SnapshotService = Depends(get_snapshot_service),
+) -> SnapshotSummaryDTO:
     """Update snapshot title and/or description."""
-    epics = get_epics_service()
-    service = SnapshotService(db, epics)
-
     snapshot = await service.update_snapshot_metadata(
         snapshot_id,
         title=data.title,
@@ -180,12 +188,16 @@ async def update_snapshot(
     )
 
     if not snapshot:
-        raise APIException(404, f"Snapshot {snapshot_id} not found", 404)
+        raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id} not found")
 
-    return success_response(snapshot)
+    return snapshot
 
 
-@router.post("/{snapshot_id}/restore", dependencies=[Security(require_write_access)])
+@router.post(
+    "/{snapshot_id}/restore",
+    dependencies=[Security(require_write_access)],
+    response_model=JobCreatedDTO | RestoreResultDTO,
+)
 async def restore_snapshot(
     snapshot_id: str,
     background_tasks: BackgroundTasks,
@@ -193,8 +205,9 @@ async def restore_snapshot(
     db: AsyncSession = Depends(get_db),
     async_mode: bool = Query(True, alias="async"),
     use_arq: bool = Query(True, description="Use Arq persistent queue (recommended) vs FastAPI BackgroundTasks"),
-    epics: EpicsService = Depends(get_epics_service),
-) -> dict:
+    service: SnapshotService = Depends(get_snapshot_service),
+    job_service: JobService = Depends(get_job_service),
+) -> JobCreatedDTO | RestoreResultDTO:
     """
     Restore PV values from a snapshot to EPICS.
 
@@ -203,16 +216,14 @@ async def restore_snapshot(
     try:
         UUID(snapshot_id)
     except ValueError:
-        raise APIException(404, f"Snapshot {snapshot_id} not found", 404)
-    service = SnapshotService(db, epics)
+        raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id} not found")
 
     # Verify snapshot exists
     snapshot = await service.get_by_id(snapshot_id)
     if not snapshot:
-        raise APIException(404, f"Snapshot {snapshot_id} not found", 404)
+        raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id} not found")
 
     if async_mode:
-        job_service = JobService(db)
         job = await job_service.create_job(
             JobType.SNAPSHOT_RESTORE,
             job_data={"snapshotId": snapshot_id},
@@ -232,12 +243,9 @@ async def restore_snapshot(
                         pv_ids=pv_ids,
                     )
                     logger.info(f"Enqueued restore job to Arq: {job.id}")
-
-                    return success_response(
-                        JobCreatedDTO(
-                            jobId=job.id,
-                            message=f"Snapshot restore queued ({snapshot_id})",
-                        )
+                    return JobCreatedDTO(
+                        jobId=job.id,
+                        message=f"Snapshot restore queued ({snapshot_id})",
                     )
                 except Exception as e:
                     logger.warning(f"Failed to enqueue to Arq, falling back to BackgroundTasks: {e}")
@@ -245,52 +253,52 @@ async def restore_snapshot(
         # Fallback to FastAPI BackgroundTasks
         background_tasks.add_task(run_snapshot_restore, str(job.id), snapshot_id, pv_ids)
         logger.info(f"Scheduled restore job via BackgroundTasks: {job.id}")
-        return success_response(
-            JobCreatedDTO(
-                jobId=job.id,
-                message=f"Snapshot restore started ({snapshot_id})",
-            )
+        return JobCreatedDTO(
+            jobId=job.id,
+            message=f"Snapshot restore started ({snapshot_id})",
         )
 
-    result = await service.restore_snapshot(snapshot_id, request)
-    return success_response(result)
+    return await service.restore_snapshot(snapshot_id, request)
 
 
-@router.delete("/{snapshot_id}", dependencies=[Security(require_write_access)])
+@router.delete(
+    "/{snapshot_id}",
+    dependencies=[Security(require_write_access)],
+    response_model=bool,
+)
 async def delete_snapshot(
     snapshot_id: str,
     deleteData: bool = Query(True),
-    db: AsyncSession = Depends(get_db),
-    epics: EpicsService = Depends(get_epics_service),
-) -> dict:
+    service: SnapshotService = Depends(get_snapshot_service),
+) -> bool:
     """Delete a snapshot."""
     try:
         UUID(snapshot_id)
     except ValueError:
-        raise APIException(404, f"Snapshot {snapshot_id} not found", 404)
-    service = SnapshotService(db, epics)
+        raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id} not found")
     success = await service.delete_snapshot(snapshot_id)
     if not success:
-        raise APIException(404, f"Snapshot {snapshot_id} not found", 404)
-    return success_response(True)
+        raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id} not found")
+    return True
 
 
-@router.get("/{snapshot1_id}/compare/{snapshot2_id}", dependencies=[Security(require_read_access)])
+@router.get(
+    "/{snapshot1_id}/compare/{snapshot2_id}",
+    dependencies=[Security(require_read_access)],
+    response_model=ComparisonResultDTO,
+)
 async def compare_snapshots(
     snapshot1_id: str,
     snapshot2_id: str,
-    db: AsyncSession = Depends(get_db),
-    epics: EpicsService = Depends(get_epics_service),
-) -> dict:
+    service: SnapshotService = Depends(get_snapshot_service),
+) -> ComparisonResultDTO:
     """Compare two snapshots and return differences."""
     try:
         UUID(snapshot1_id)
         UUID(snapshot2_id)
     except ValueError:
-        raise APIException(404, "Snapshot not found", 404)
-    service = SnapshotService(db, epics)
+        raise HTTPException(status_code=404, detail="Snapshot not found")
     try:
-        result = await service.compare_snapshots(snapshot1_id, snapshot2_id)
-        return success_response(result)
+        return await service.compare_snapshots(snapshot1_id, snapshot2_id)
     except ValueError as e:
-        raise APIException(404, str(e), 404)
+        raise HTTPException(status_code=404, detail=str(e))
