@@ -60,3 +60,10 @@ class TagGroupDTO(TagGroupBase):
 
     class Config:
         from_attributes = True
+
+
+class AddTagResponse(BaseModel):
+    """Response from POST /v1/tags/{group_id}/tags."""
+
+    group: TagGroupDTO
+    wasCreated: bool

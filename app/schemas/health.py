@@ -8,6 +8,8 @@ class HeartbeatResponse(BaseModel):
 
     timestamp: float | None
     alive: bool
+    age_seconds: float | None = None
+    error: str | None = None
 
 
 class MonitorHealthResponse(BaseModel):
@@ -52,3 +54,56 @@ class HealthSummaryResponse(BaseModel):
     watchdog_running: bool
     last_watchdog_check: datetime | None
     issues: list[str]
+
+
+class DisconnectedPVsResponse(BaseModel):
+    """List of disconnected PVs."""
+
+    count: int
+    pvs: list[str]
+
+
+class StalePVsResponse(BaseModel):
+    """List of stale (un-updated) PVs."""
+
+    count: int
+    threshold_seconds: float
+    pvs: list[str]
+
+
+class CircuitStatsResponse(BaseModel):
+    """Per-circuit statistics."""
+
+    name: str
+    state: str
+    failure_count: int
+    success_count: int
+    call_count: int
+    last_failure: str | None = None
+    opened_at: str | None = None
+
+
+class CircuitStatusResponse(BaseModel):
+    """Aggregated circuit-breaker status for all EPICS IOCs."""
+
+    open_circuit_count: int
+    total_circuits: int
+    open_circuits: list[str] = []
+    circuits: list[CircuitStatsResponse] = []
+    error: str | None = None
+
+
+class CircuitActionResponse(BaseModel):
+    """Result of a force-open / force-close action on a circuit breaker."""
+
+    success: bool
+    message: str
+
+
+class MonitorProcessStatusResponse(BaseModel):
+    """Liveness of the separate PV Monitor process."""
+
+    status: str  # "healthy", "stale", "unknown", "error"
+    message: str | None = None
+    age_seconds: float | None = None
+    leader: str | None = None

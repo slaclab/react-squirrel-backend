@@ -5,7 +5,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi import status
+from fastapi import HTTPException, status
 from fastapi.exceptions import WebSocketException
 
 from app.dependencies import (
@@ -19,7 +19,6 @@ from app.dependencies import (
     ws_require_read_access,
     ws_require_write_access,
 )
-from app.api.responses import APIException
 from app.schemas.api_key import ApiKeyDTO
 from app.services.pv_service import PVService
 from app.services.tag_service import TagService
@@ -123,29 +122,26 @@ class TestGetApiKey:
     async def test_no_header_raises_401(self):
         """Missing header (None) should raise 401 immediately."""
         service = _make_mock_api_key_service()
-        with pytest.raises(APIException) as exc_info:
+        with pytest.raises(HTTPException) as exc_info:
             await get_api_key(service, None)
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert exc_info.value.error_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
     async def test_unknown_token_raises_401(self):
         """A token not found in the DB should raise 401."""
         service = _make_mock_api_key_service(return_value=None)
-        with pytest.raises(APIException) as exc_info:
+        with pytest.raises(HTTPException) as exc_info:
             await get_api_key(service, "sq_unknown")
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert exc_info.value.error_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
     async def test_inactive_key_raises_401(self):
         """A deactivated key should raise 401."""
         inactive_key = _make_api_key_dto(isActive=False)
         service = _make_mock_api_key_service(return_value=inactive_key)
-        with pytest.raises(APIException) as exc_info:
+        with pytest.raises(HTTPException) as exc_info:
             await get_api_key(service, "sq_inactive")
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert exc_info.value.error_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
     async def test_active_key_returns_dto(self):
@@ -159,16 +155,16 @@ class TestGetApiKey:
     async def test_error_message_mentions_api_key(self):
         """401 error message should reference the API key."""
         service = _make_mock_api_key_service()
-        with pytest.raises(APIException) as exc_info:
+        with pytest.raises(HTTPException) as exc_info:
             await get_api_key(service, None)
-        assert "api key" in exc_info.value.error_message.lower()
+        assert "api key" in exc_info.value.detail.lower()
 
     @pytest.mark.asyncio
     async def test_service_receives_provided_token(self):
         """The exact header value should be forwarded to ApiKeyService.get_by_token."""
         token = "sq_specific_token_value"
         service = _make_mock_api_key_service(return_value=None)
-        with pytest.raises(APIException):
+        with pytest.raises(HTTPException):
             await get_api_key(service, token)
         service.get_by_token.assert_awaited_once_with(token)
 
@@ -184,10 +180,9 @@ class TestRequireReadAccess:
     def test_raises_401_when_read_access_false(self):
         """A key without read access should be rejected."""
         dto = _make_api_key_dto(readAccess=False)
-        with pytest.raises(APIException) as exc_info:
+        with pytest.raises(HTTPException) as exc_info:
             require_read_access(dto)
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert exc_info.value.error_code == status.HTTP_401_UNAUTHORIZED
 
     def test_passes_when_read_access_true(self):
         """A key with read access should not raise."""
@@ -197,9 +192,9 @@ class TestRequireReadAccess:
     def test_error_message_mentions_read(self):
         """Error message should indicate lack of read access."""
         dto = _make_api_key_dto(readAccess=False)
-        with pytest.raises(APIException) as exc_info:
+        with pytest.raises(HTTPException) as exc_info:
             require_read_access(dto)
-        assert "read" in exc_info.value.error_message.lower()
+        assert "read" in exc_info.value.detail.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -213,10 +208,9 @@ class TestRequireWriteAccess:
     def test_raises_401_when_write_access_false(self):
         """A key without write access should be rejected."""
         dto = _make_api_key_dto(writeAccess=False)
-        with pytest.raises(APIException) as exc_info:
+        with pytest.raises(HTTPException) as exc_info:
             require_write_access(dto)
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert exc_info.value.error_code == status.HTTP_401_UNAUTHORIZED
 
     def test_passes_when_write_access_true(self):
         """A key with write access should not raise."""
@@ -226,9 +220,9 @@ class TestRequireWriteAccess:
     def test_error_message_mentions_write(self):
         """Error message should indicate lack of write access."""
         dto = _make_api_key_dto(writeAccess=False)
-        with pytest.raises(APIException) as exc_info:
+        with pytest.raises(HTTPException) as exc_info:
             require_write_access(dto)
-        assert "write" in exc_info.value.error_message.lower()
+        assert "write" in exc_info.value.detail.lower()
 
 
 # ---------------------------------------------------------------------------

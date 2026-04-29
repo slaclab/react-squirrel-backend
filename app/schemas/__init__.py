@@ -1,4 +1,4 @@
-from app.schemas.common import ApiResultResponse, PagedResult
+from app.schemas.common import PagedResult
 from app.schemas.tag import (
     TagDTO,
     TagCreate,
@@ -21,7 +21,6 @@ from app.schemas.snapshot import (
 )
 
 __all__ = [
-    "ApiResultResponse",
     "PagedResult",
     "TagDTO",
     "TagCreate",

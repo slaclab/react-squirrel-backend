@@ -28,10 +28,9 @@ class TestSnapshotCreate:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"]["title"] == "Test Snapshot Creation"
-        assert data["payload"]["pvCount"] >= len(sample_pvs)
-        assert data["payload"]["id"] is not None
+        assert data["title"] == "Test Snapshot Creation"
+        assert data["pvCount"] >= len(sample_pvs)
+        assert data["id"] is not None
 
     @pytest.mark.asyncio
     async def test_create_snapshot_with_disconnected_pvs(
@@ -48,8 +47,6 @@ class TestSnapshotCreate:
         )
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["errorCode"] == 0
         # Should still create snapshot even with some missing values
 
     @pytest.mark.asyncio
@@ -71,11 +68,10 @@ class TestSnapshotGet:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"]["id"] == snapshot_id
-        assert data["payload"]["title"] == sample_snapshot["title"]
-        assert "pvValues" in data["payload"]
-        assert len(data["payload"]["pvValues"]) > 0
+        assert data["id"] == snapshot_id
+        assert data["title"] == sample_snapshot["title"]
+        assert "pvValues" in data
+        assert len(data["pvValues"]) > 0
 
     @pytest.mark.asyncio
     async def test_get_snapshot_not_found(self, client: AsyncClient):
@@ -83,8 +79,6 @@ class TestSnapshotGet:
         response = await client.get("/v1/snapshots/nonexistent-id")
 
         assert response.status_code == 404
-        data = response.json()
-        assert data["errorCode"] == 404
 
     @pytest.mark.asyncio
     async def test_list_snapshots(self, client: AsyncClient, sample_snapshot: dict):
@@ -92,9 +86,7 @@ class TestSnapshotGet:
         response = await client.get("/v1/snapshots")
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["errorCode"] == 0
-        assert len(data["payload"]) >= 1
+        assert len(response.json()) >= 1
 
     @pytest.mark.asyncio
     async def test_list_snapshots_with_filter(self, client: AsyncClient, sample_snapshot: dict):
@@ -102,9 +94,7 @@ class TestSnapshotGet:
         response = await client.get("/v1/snapshots", params={"title": "Test"})
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["errorCode"] == 0
-        assert len(data["payload"]) >= 1
+        assert len(response.json()) >= 1
 
 
 class TestSnapshotRestore:
@@ -118,10 +108,9 @@ class TestSnapshotRestore:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
-        assert "successCount" in data["payload"]
-        assert "failureCount" in data["payload"]
-        assert data["payload"]["failureCount"] == 0
+        assert "successCount" in data
+        assert "failureCount" in data
+        assert data["failureCount"] == 0
 
     @pytest.mark.asyncio
     async def test_restore_snapshot_partial(
@@ -134,10 +123,8 @@ class TestSnapshotRestore:
         response = await client.post(f"/v1/snapshots/{snapshot_id}/restore?async=false", json={"pvIds": pv_ids})
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["errorCode"] == 0
         # Only 2 PVs should be restored
-        assert data["payload"]["totalPVs"] <= 2
+        assert response.json()["totalPVs"] <= 2
 
     @pytest.mark.asyncio
     async def test_restore_snapshot_not_found(self, client: AsyncClient):
@@ -168,7 +155,7 @@ class TestSnapshotCompare:
             params={"async": "false", "use_cache": "false"},
             json={"title": "Snapshot 1"},
         )
-        snap1_id = resp1.json()["payload"]["id"]
+        snap1_id = resp1.json()["id"]
 
         # Create second snapshot (same values)
         resp2 = await client.post(
@@ -176,16 +163,15 @@ class TestSnapshotCompare:
             params={"async": "false", "use_cache": "false"},
             json={"title": "Snapshot 2"},
         )
-        snap2_id = resp2.json()["payload"]["id"]
+        snap2_id = resp2.json()["id"]
 
         # Compare
         response = await client.get(f"/v1/snapshots/{snap1_id}/compare/{snap2_id}")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"]["differenceCount"] == 0
-        assert data["payload"]["matchCount"] > 0
+        assert data["differenceCount"] == 0
+        assert data["matchCount"] > 0
 
     @pytest.mark.asyncio
     async def test_compare_snapshots_different(
@@ -205,7 +191,7 @@ class TestSnapshotCompare:
             params={"async": "false", "use_cache": "false"},
             json={"title": "Before Change"},
         )
-        snap1_id = resp1.json()["payload"]["id"]
+        snap1_id = resp1.json()["id"]
 
         # Change values significantly (beyond default tolerance)
         for pv in sample_pvs:
@@ -220,15 +206,13 @@ class TestSnapshotCompare:
             params={"async": "false", "use_cache": "false"},
             json={"title": "After Change"},
         )
-        snap2_id = resp2.json()["payload"]["id"]
+        snap2_id = resp2.json()["id"]
 
         # Compare
         response = await client.get(f"/v1/snapshots/{snap1_id}/compare/{snap2_id}")
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"]["differenceCount"] > 0
+        assert response.json()["differenceCount"] > 0
 
     @pytest.mark.asyncio
     async def test_compare_snapshots_not_found(self, client: AsyncClient, sample_snapshot: dict):
@@ -249,9 +233,7 @@ class TestSnapshotDelete:
         response = await client.delete(f"/v1/snapshots/{snapshot_id}")
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"] is True
+        assert response.json() is True
 
         # Verify deletion
         get_response = await client.get(f"/v1/snapshots/{snapshot_id}")

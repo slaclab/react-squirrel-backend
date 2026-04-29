@@ -75,7 +75,7 @@ class ApiKeyService:
         all_keys = await self.repo.get_all(active_only)
         return list(map(self._to_dto, all_keys))
 
-    async def deactivate_key(self, key_id: str) -> ApiKeyDTO | None:
+    async def deactivate_key(self, key_id: str) -> ApiKeyDTO:
         """Deactivate API Key by ID."""
         api_key = await self.repo.get_by_id(key_id)
         if not api_key:

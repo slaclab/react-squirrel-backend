@@ -16,11 +16,10 @@ class TestTagGroupCreate:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"]["name"] == "Location"
-        assert data["payload"]["description"] == "Physical location tags"
-        assert data["payload"]["id"] is not None
-        assert data["payload"]["tags"] == []
+        assert data["name"] == "Location"
+        assert data["description"] == "Physical location tags"
+        assert data["id"] is not None
+        assert data["tags"] == []
 
     @pytest.mark.asyncio
     async def test_create_tag_group_without_description(self, client: AsyncClient):
@@ -29,9 +28,8 @@ class TestTagGroupCreate:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"]["name"] == "System"
-        assert data["payload"]["description"] is None
+        assert data["name"] == "System"
+        assert data["description"] is None
 
     @pytest.mark.asyncio
     async def test_create_tag_group_duplicate_name_fails(self, client: AsyncClient, sample_tag_group: dict):
@@ -39,9 +37,7 @@ class TestTagGroupCreate:
         response = await client.post("/v1/tags", json={"name": sample_tag_group["name"]})  # Duplicate name
 
         assert response.status_code == 409
-        data = response.json()
-        assert data["errorCode"] == 409
-        assert "already exists" in data["errorMessage"]
+        assert "already exists" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_create_tag_group_requires_name(self, client: AsyncClient):
@@ -61,11 +57,10 @@ class TestTagGroupGet:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
-        assert len(data["payload"]) >= 1
+        assert len(data) >= 1
 
         # Check that summary includes tag count
-        group = next(g for g in data["payload"] if g["id"] == sample_tag_group["id"])
+        group = next(g for g in data if g["id"] == sample_tag_group["id"])
         assert "tagCount" in group
 
     @pytest.mark.asyncio
@@ -76,11 +71,10 @@ class TestTagGroupGet:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
         # Response is wrapped in array per frontend expectation
-        assert isinstance(data["payload"], list)
-        assert len(data["payload"]) == 1
-        assert data["payload"][0]["id"] == group_id
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["id"] == group_id
 
     @pytest.mark.asyncio
     async def test_get_tag_group_not_found(self, client: AsyncClient):
@@ -88,8 +82,6 @@ class TestTagGroupGet:
         response = await client.get("/v1/tags/nonexistent-id")
 
         assert response.status_code == 404
-        data = response.json()
-        assert data["errorCode"] == 404
 
 
 class TestTagGroupUpdate:
@@ -102,9 +94,7 @@ class TestTagGroupUpdate:
         response = await client.put(f"/v1/tags/{group_id}", json={"name": "Updated Location"})
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"]["name"] == "Updated Location"
+        assert response.json()["name"] == "Updated Location"
 
     @pytest.mark.asyncio
     async def test_update_tag_group_description(self, client: AsyncClient, sample_tag_group: dict):
@@ -113,9 +103,7 @@ class TestTagGroupUpdate:
         response = await client.put(f"/v1/tags/{group_id}", json={"description": "Updated description"})
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"]["description"] == "Updated description"
+        assert response.json()["description"] == "Updated description"
 
     @pytest.mark.asyncio
     async def test_update_tag_group_not_found(self, client: AsyncClient):
@@ -135,9 +123,7 @@ class TestTagGroupDelete:
         response = await client.delete(f"/v1/tags/{group_id}")
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"] is True
+        assert response.json() is True
 
         # Verify deletion
         get_response = await client.get(f"/v1/tags/{group_id}")
@@ -164,9 +150,8 @@ class TestTagOperations:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
-        assert len(data["payload"]["group"]["tags"]) == 1
-        assert data["payload"]["group"]["tags"][0]["name"] == "Building-A"
+        assert len(data["group"]["tags"]) == 1
+        assert data["group"]["tags"][0]["name"] == "Building-A"
 
     @pytest.mark.asyncio
     async def test_add_multiple_tags_to_group(self, client: AsyncClient, sample_tag_group: dict):
@@ -180,8 +165,7 @@ class TestTagOperations:
         response = await client.post(f"/v1/tags/{group_id}/tags", json={"name": "Tag-2"})
 
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["payload"]["group"]["tags"]) == 2
+        assert len(response.json()["group"]["tags"]) == 2
 
     @pytest.mark.asyncio
     async def test_add_duplicate_tag_fails(self, client: AsyncClient, sample_tag: tuple):
@@ -192,8 +176,7 @@ class TestTagOperations:
         response = await client.post(f"/v1/tags/{group_id}/tags", json={"name": tag["name"]})  # Duplicate name
 
         assert response.status_code == 409
-        data = response.json()
-        assert "already exists" in data["errorMessage"]
+        assert "already exists" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_add_duplicate_tag_with_skip_duplicates_succeeds(self, client: AsyncClient, sample_tag: tuple):
@@ -208,9 +191,8 @@ class TestTagOperations:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"]["wasCreated"] is False  # Tag already existed
-        assert data["payload"]["group"]["id"] == group_id
+        assert data["wasCreated"] is False  # Tag already existed
+        assert data["group"]["id"] == group_id
 
     @pytest.mark.asyncio
     async def test_add_tag_to_nonexistent_group(self, client: AsyncClient):
@@ -233,8 +215,7 @@ class TestTagOperations:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
-        updated_tag = next(t for t in data["payload"]["tags"] if t["id"] == tag_id)
+        updated_tag = next(t for t in data["tags"] if t["id"] == tag_id)
         assert updated_tag["name"] == "Updated-Tag-Name"
 
     @pytest.mark.asyncio
@@ -255,10 +236,8 @@ class TestTagOperations:
         response = await client.delete(f"/v1/tags/{group_id}/tags/{tag_id}")
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["errorCode"] == 0
         # Tag should be removed from the group
-        assert len(data["payload"]["tags"]) == 0
+        assert len(response.json()["tags"]) == 0
 
     @pytest.mark.asyncio
     async def test_remove_tag_not_found(self, client: AsyncClient, sample_tag_group: dict):
@@ -287,11 +266,10 @@ class TestBulkTagImport:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"]["groupsCreated"] == 2
-        assert data["payload"]["tagsCreated"] == 5
-        assert data["payload"]["tagsSkipped"] == 0
-        assert len(data["payload"]["warnings"]) == 0
+        assert data["groupsCreated"] == 2
+        assert data["tagsCreated"] == 5
+        assert data["tagsSkipped"] == 0
+        assert len(data["warnings"]) == 0
 
     @pytest.mark.asyncio
     async def test_bulk_import_tags_skips_duplicates(self, client: AsyncClient, sample_tag: tuple):
@@ -310,12 +288,11 @@ class TestBulkTagImport:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"]["groupsCreated"] == 0  # Group already exists
-        assert data["payload"]["tagsCreated"] == 2  # Only new tags created
-        assert data["payload"]["tagsSkipped"] == 1  # Duplicate tag skipped
-        assert len(data["payload"]["warnings"]) == 1
-        assert "already exists" in data["payload"]["warnings"][0]
+        assert data["groupsCreated"] == 0  # Group already exists
+        assert data["tagsCreated"] == 2  # Only new tags created
+        assert data["tagsSkipped"] == 1  # Duplicate tag skipped
+        assert len(data["warnings"]) == 1
+        assert "already exists" in data["warnings"][0]
 
     @pytest.mark.asyncio
     async def test_bulk_import_tags_with_existing_group(self, client: AsyncClient, sample_tag_group: dict):
@@ -333,10 +310,9 @@ class TestBulkTagImport:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"]["groupsCreated"] == 0  # Group already exists
-        assert data["payload"]["tagsCreated"] == 2
-        assert data["payload"]["tagsSkipped"] == 0
+        assert data["groupsCreated"] == 0  # Group already exists
+        assert data["tagsCreated"] == 2
+        assert data["tagsSkipped"] == 0
 
     @pytest.mark.asyncio
     async def test_bulk_import_tags_empty_groups(self, client: AsyncClient):
@@ -345,7 +321,6 @@ class TestBulkTagImport:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["errorCode"] == 0
-        assert data["payload"]["groupsCreated"] == 0
-        assert data["payload"]["tagsCreated"] == 0
-        assert data["payload"]["tagsSkipped"] == 0
+        assert data["groupsCreated"] == 0
+        assert data["tagsCreated"] == 0
+        assert data["tagsSkipped"] == 0
