@@ -221,7 +221,9 @@ async def get_cache_status(redis: RedisServiceDep) -> dict:
 @router.get("/test-epics", dependencies=[Security(require_read_access)])
 async def test_epics_connection(
     epics: EpicsServiceDep,
-    pv: str = Query("KLYS:LI22:31:KVAC", description="PV name to test"),
+    pv: str = Query(
+        "KLYS:LI22:31:KVAC", description="PV name to test; Defaults to KLYS:LI22:31:KVAC, a SLAC-specific PV"
+    ),
 ) -> dict:
     """Test EPICS connectivity using aioca."""
     result = await epics.get_single(pv)
