@@ -11,7 +11,7 @@ from datetime import datetime
 
 from fastapi import Security, APIRouter, HTTPException
 
-from app.dependencies import require_read_access, require_write_access
+from app.dependencies import RedisServiceDep, require_read_access, require_write_access
 from app.api.responses import success_response
 from app.schemas.health import (
     HealthSummaryResponse,
@@ -20,13 +20,12 @@ from app.schemas.health import (
 )
 from app.services.watchdog import get_watchdog
 from app.services.pv_monitor import get_pv_monitor
-from app.services.redis_service import get_redis_service
 
 router = APIRouter(prefix="/health", tags=["Health"])
 
 
 @router.get("/heartbeat")
-async def get_heartbeat() -> dict:
+async def get_heartbeat(redis: RedisServiceDep) -> dict:
     """
     Simple heartbeat check for frontend polling.
 
@@ -35,8 +34,6 @@ async def get_heartbeat() -> dict:
     banner if alive=false.
     """
     try:
-        redis = get_redis_service()
-
         # Check if Redis is connected
         if not redis.is_connected():
             return success_response(
@@ -72,14 +69,13 @@ async def get_heartbeat() -> dict:
 
 
 @router.get("/monitor", dependencies=[Security(require_read_access)])
-async def get_monitor_health() -> MonitorHealthResponse:
+async def get_monitor_health(redis: RedisServiceDep) -> MonitorHealthResponse:
     """
     Get detailed monitor health information.
 
     Includes connection counts, monitor status, and watchdog status.
     """
     try:
-        redis = get_redis_service()
         pv_monitor = get_pv_monitor()
         watchdog = get_watchdog()
 
@@ -166,7 +162,7 @@ async def force_watchdog_check() -> WatchdogStatsResponse:
 
 
 @router.get("/summary", dependencies=[Security(require_read_access)])
-async def get_health_summary() -> HealthSummaryResponse:
+async def get_health_summary(redis: RedisServiceDep) -> HealthSummaryResponse:
     """
     Get a complete health summary for monitoring dashboards.
 
@@ -175,7 +171,6 @@ async def get_health_summary() -> HealthSummaryResponse:
     issues = []
 
     try:
-        redis = get_redis_service()
         pv_monitor = get_pv_monitor()
         watchdog = get_watchdog()
 
@@ -253,14 +248,13 @@ async def get_health_summary() -> HealthSummaryResponse:
 
 
 @router.get("/disconnected", dependencies=[Security(require_read_access)])
-async def get_disconnected_pvs() -> dict:
+async def get_disconnected_pvs(redis: RedisServiceDep) -> dict:
     """
     Get list of all disconnected PVs.
 
     Useful for diagnostics and debugging connection issues.
     """
     try:
-        redis = get_redis_service()
         disconnected = await redis.get_disconnected_pvs()
 
         return {
@@ -273,7 +267,10 @@ async def get_disconnected_pvs() -> dict:
 
 
 @router.get("/stale", dependencies=[Security(require_read_access)])
-async def get_stale_pvs(max_age_seconds: float = 300) -> dict:
+async def get_stale_pvs(
+    redis: RedisServiceDep,
+    max_age_seconds: float = 300,
+) -> dict:
     """
     Get list of stale PVs (connected but not updated recently).
 
@@ -281,7 +278,6 @@ async def get_stale_pvs(max_age_seconds: float = 300) -> dict:
         max_age_seconds: Consider stale if not updated in this many seconds
     """
     try:
-        redis = get_redis_service()
         stale = await redis.get_stale_pvs(max_age_seconds=max_age_seconds)
 
         return {
@@ -386,7 +382,7 @@ async def force_open_circuit(circuit_name: str) -> dict:
 
 
 @router.get("/monitor/status", dependencies=[Security(require_read_access)])
-async def monitor_process_status() -> dict:
+async def monitor_process_status(redis: RedisServiceDep) -> dict:
     """
     Check if the separate PV Monitor process is alive via Redis heartbeat.
 
@@ -399,8 +395,6 @@ async def monitor_process_status() -> dict:
         leader: Instance ID of current monitor leader (if available)
     """
     try:
-        redis = get_redis_service()
-
         if not redis.is_connected():
             return {
                 "status": "unknown",

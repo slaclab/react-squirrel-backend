@@ -2,7 +2,7 @@
 Tests for app/dependencies.py — service factories and auth guards.
 """
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import status
@@ -91,13 +91,15 @@ class TestGetSnapshotService:
     def test_returns_snapshot_service_instance(self):
         db = MagicMock()
         epics = MagicMock()
-        result = get_snapshot_service(db, epics)
+        redis = MagicMock()
+        result = get_snapshot_service(db, epics, redis)
         assert isinstance(result, SnapshotService)
 
     def test_passes_db_and_epics_to_service(self):
         db = MagicMock()
         epics = MagicMock()
-        result = get_snapshot_service(db, epics)
+        redis = MagicMock()
+        result = get_snapshot_service(db, epics, redis)
         assert result.session is db
         assert result.epics is epics
 
@@ -107,70 +109,68 @@ class TestGetSnapshotService:
 # ---------------------------------------------------------------------------
 
 
+def _make_mock_api_key_service(return_value=None) -> MagicMock:
+    """Build a mock ApiKeyService with an async get_by_token."""
+    service = MagicMock()
+    service.get_by_token = AsyncMock(return_value=return_value)
+    return service
+
+
 class TestGetApiKey:
     """Tests for get_api_key dependency."""
 
     @pytest.mark.asyncio
     async def test_no_header_raises_401(self):
         """Missing header (None) should raise 401 immediately."""
-        db = MagicMock()
+        service = _make_mock_api_key_service()
         with pytest.raises(APIException) as exc_info:
-            await get_api_key(db, None)
+            await get_api_key(service, None)
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
         assert exc_info.value.error_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
     async def test_unknown_token_raises_401(self):
         """A token not found in the DB should raise 401."""
-        db = MagicMock()
-        with patch("app.dependencies.ApiKeyService") as MockService:
-            MockService.return_value.get_by_token = AsyncMock(return_value=None)
-            with pytest.raises(APIException) as exc_info:
-                await get_api_key(db, "sq_unknown")
+        service = _make_mock_api_key_service(return_value=None)
+        with pytest.raises(APIException) as exc_info:
+            await get_api_key(service, "sq_unknown")
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
         assert exc_info.value.error_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
     async def test_inactive_key_raises_401(self):
         """A deactivated key should raise 401."""
-        db = MagicMock()
         inactive_key = _make_api_key_dto(isActive=False)
-        with patch("app.dependencies.ApiKeyService") as MockService:
-            MockService.return_value.get_by_token = AsyncMock(return_value=inactive_key)
-            with pytest.raises(APIException) as exc_info:
-                await get_api_key(db, "sq_inactive")
+        service = _make_mock_api_key_service(return_value=inactive_key)
+        with pytest.raises(APIException) as exc_info:
+            await get_api_key(service, "sq_inactive")
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
         assert exc_info.value.error_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
     async def test_active_key_returns_dto(self):
         """A valid, active key should be returned as-is."""
-        db = MagicMock()
         active_key = _make_api_key_dto(isActive=True)
-        with patch("app.dependencies.ApiKeyService") as MockService:
-            MockService.return_value.get_by_token = AsyncMock(return_value=active_key)
-            result = await get_api_key(db, "sq_valid_token")
+        service = _make_mock_api_key_service(return_value=active_key)
+        result = await get_api_key(service, "sq_valid_token")
         assert result is active_key
 
     @pytest.mark.asyncio
     async def test_error_message_mentions_api_key(self):
         """401 error message should reference the API key."""
-        db = MagicMock()
+        service = _make_mock_api_key_service()
         with pytest.raises(APIException) as exc_info:
-            await get_api_key(db, None)
+            await get_api_key(service, None)
         assert "api key" in exc_info.value.error_message.lower()
 
     @pytest.mark.asyncio
     async def test_service_receives_provided_token(self):
         """The exact header value should be forwarded to ApiKeyService.get_by_token."""
-        db = MagicMock()
         token = "sq_specific_token_value"
-        with patch("app.dependencies.ApiKeyService") as MockService:
-            mock_get = AsyncMock(return_value=None)
-            MockService.return_value.get_by_token = mock_get
-            with pytest.raises(APIException):
-                await get_api_key(db, token)
-        mock_get.assert_awaited_once_with(token)
+        service = _make_mock_api_key_service(return_value=None)
+        with pytest.raises(APIException):
+            await get_api_key(service, token)
+        service.get_by_token.assert_awaited_once_with(token)
 
 
 # ---------------------------------------------------------------------------
@@ -243,43 +243,37 @@ class TestWsGetApiKey:
     async def test_missing_header_raises_ws_exception(self):
         """No X-API-Key header should raise WebSocketException 1008."""
         ws = _make_websocket()
-        db = MagicMock()
+        service = _make_mock_api_key_service()
         with pytest.raises(WebSocketException) as exc_info:
-            await ws_get_api_key(ws, db)
+            await ws_get_api_key(ws, service)
         assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
 
     @pytest.mark.asyncio
     async def test_unknown_token_raises_ws_exception(self):
         """A token not found in the DB should raise WebSocketException 1008."""
         ws = _make_websocket("sq_unknown")
-        db = MagicMock()
-        with patch("app.dependencies.ApiKeyService") as MockService:
-            MockService.return_value.get_by_token = AsyncMock(return_value=None)
-            with pytest.raises(WebSocketException) as exc_info:
-                await ws_get_api_key(ws, db)
+        service = _make_mock_api_key_service(return_value=None)
+        with pytest.raises(WebSocketException) as exc_info:
+            await ws_get_api_key(ws, service)
         assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
 
     @pytest.mark.asyncio
     async def test_inactive_key_raises_ws_exception(self):
         """A deactivated key should raise WebSocketException 1008."""
         ws = _make_websocket("sq_inactive")
-        db = MagicMock()
         inactive_key = _make_api_key_dto(isActive=False)
-        with patch("app.dependencies.ApiKeyService") as MockService:
-            MockService.return_value.get_by_token = AsyncMock(return_value=inactive_key)
-            with pytest.raises(WebSocketException) as exc_info:
-                await ws_get_api_key(ws, db)
+        service = _make_mock_api_key_service(return_value=inactive_key)
+        with pytest.raises(WebSocketException) as exc_info:
+            await ws_get_api_key(ws, service)
         assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
 
     @pytest.mark.asyncio
     async def test_active_key_returns_dto(self):
         """A valid, active key should be returned as-is."""
         ws = _make_websocket("sq_valid_token")
-        db = MagicMock()
         active_key = _make_api_key_dto(isActive=True)
-        with patch("app.dependencies.ApiKeyService") as MockService:
-            MockService.return_value.get_by_token = AsyncMock(return_value=active_key)
-            result = await ws_get_api_key(ws, db)
+        service = _make_mock_api_key_service(return_value=active_key)
+        result = await ws_get_api_key(ws, service)
         assert result is active_key
 
     @pytest.mark.asyncio
@@ -287,21 +281,18 @@ class TestWsGetApiKey:
         """The exact header value should be forwarded to ApiKeyService.get_by_token."""
         token = "sq_specific_token_value"
         ws = _make_websocket(token)
-        db = MagicMock()
-        with patch("app.dependencies.ApiKeyService") as MockService:
-            mock_get = AsyncMock(return_value=None)
-            MockService.return_value.get_by_token = mock_get
-            with pytest.raises(WebSocketException):
-                await ws_get_api_key(ws, db)
-        mock_get.assert_awaited_once_with(token)
+        service = _make_mock_api_key_service(return_value=None)
+        with pytest.raises(WebSocketException):
+            await ws_get_api_key(ws, service)
+        service.get_by_token.assert_awaited_once_with(token)
 
     @pytest.mark.asyncio
     async def test_error_reason_mentions_api_key(self):
         """WebSocketException reason should reference the API key."""
         ws = _make_websocket()
-        db = MagicMock()
+        service = _make_mock_api_key_service()
         with pytest.raises(WebSocketException) as exc_info:
-            await ws_get_api_key(ws, db)
+            await ws_get_api_key(ws, service)
         assert "api key" in exc_info.value.reason.lower()
 
 
