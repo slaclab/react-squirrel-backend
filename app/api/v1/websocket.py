@@ -26,7 +26,11 @@ from collections import defaultdict
 from fastapi import Security, APIRouter, WebSocket, WebSocketDisconnect
 
 from app.config import get_settings
-from app.dependencies import require_read_access, ws_require_read_access
+from app.dependencies import (
+    RedisServiceDep,
+    require_read_access,
+    ws_require_read_access,
+)
 from app.services.redis_service import get_redis_service
 from app.services.subscription_registry import (
     SubscriptionRegistry,
@@ -428,7 +432,7 @@ def get_connection_manager() -> DiffStreamManager:
 
 
 @router.websocket("/pvs", dependencies=[Security(ws_require_read_access)])
-async def websocket_pvs(websocket: WebSocket):
+async def websocket_pvs(websocket: WebSocket, redis: RedisServiceDep):
     """
     WebSocket endpoint for real-time PV updates with diff streaming.
 
@@ -467,7 +471,6 @@ async def websocket_pvs(websocket: WebSocket):
             elif message_type == "get_all":
                 # Send all cached values (legacy support)
                 try:
-                    redis = get_redis_service()
                     all_values = await redis.get_all_pv_values_as_dict()
                     await websocket.send_json(
                         {
