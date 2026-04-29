@@ -1,18 +1,14 @@
 """API endpoints for job status monitoring."""
-from fastapi import Depends, Security, APIRouter
+from fastapi import Security, APIRouter
 
-from app.dependencies import get_job_service, require_read_access
+from app.dependencies import JobServiceDep, require_read_access
 from app.api.responses import APIException, success_response
-from app.services.job_service import JobService
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
 
 @router.get("/{job_id}", dependencies=[Security(require_read_access)])
-async def get_job_status(
-    job_id: str,
-    job_service: JobService = Depends(get_job_service),
-) -> dict:
+async def get_job_status(job_id: str, job_service: JobServiceDep) -> dict:
     """
     Get the status of a background job.
 

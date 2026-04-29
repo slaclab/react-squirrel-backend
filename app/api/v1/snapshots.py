@@ -2,25 +2,22 @@ import logging
 from uuid import UUID
 
 from arq import create_pool
-from fastapi import Query, Depends, Security, APIRouter, BackgroundTasks
+from fastapi import Query, Security, APIRouter, BackgroundTasks
 from arq.connections import RedisSettings
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.db.session import get_db
 from app.models.job import JobType
 from app.schemas.job import JobCreatedDTO
 from app.dependencies import (
-    get_job_service,
+    DataBaseDep,
+    JobServiceDep,
+    SnapshotServiceDep,
     require_read_access,
-    get_snapshot_service,
     require_write_access,
 )
 from app.api.responses import APIException, success_response
 from app.schemas.snapshot import NewSnapshotDTO, RestoreRequestDTO, UpdateSnapshotDTO
-from app.services.job_service import JobService
 from app.services.background_tasks import run_snapshot_restore, run_snapshot_creation
-from app.services.snapshot_service import SnapshotService
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -46,10 +43,10 @@ async def get_arq_pool():
 
 @router.get("", dependencies=[Security(require_read_access)])
 async def list_snapshots(
+    service: SnapshotServiceDep,
     title: str | None = Query(None),
     tags: list[str]
     | None = Query(None, description="Filter by tag IDs (returns snapshots containing PVs with any of these tags)"),
-    service: SnapshotService = Depends(get_snapshot_service),
 ) -> dict:
     """List all snapshots, optionally filtered by title and/or tags."""
     snapshots = await service.list_snapshots(title=title, tag_ids=tags)
@@ -59,9 +56,9 @@ async def list_snapshots(
 @router.get("/{snapshot_id}", dependencies=[Security(require_read_access)])
 async def get_snapshot(
     snapshot_id: str,
+    service: SnapshotServiceDep,
     limit: int | None = Query(None, description="Limit number of PV values returned"),
     offset: int = Query(0, description="Offset for pagination"),
-    service: SnapshotService = Depends(get_snapshot_service),
 ) -> dict:
     """
     Get snapshot by ID with values.
@@ -83,12 +80,12 @@ async def get_snapshot(
 async def create_snapshot(
     data: NewSnapshotDTO,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
+    db: DataBaseDep,
+    service: SnapshotServiceDep,
+    job_service: JobServiceDep,
     async_mode: bool = Query(True, alias="async", description="Run snapshot creation in background"),
     use_cache: bool = Query(True, description="Read from Redis cache (instant) vs direct EPICS read"),
     use_arq: bool = Query(True, description="Use Arq persistent queue (recommended) vs FastAPI BackgroundTasks"),
-    service: SnapshotService = Depends(get_snapshot_service),
-    job_service: JobService = Depends(get_job_service),
 ) -> dict:
     """
     Create a new snapshot by reading all PVs.
@@ -163,7 +160,7 @@ async def create_snapshot(
 async def update_snapshot(
     snapshot_id: str,
     data: UpdateSnapshotDTO,
-    service: SnapshotService = Depends(get_snapshot_service),
+    service: SnapshotServiceDep,
 ) -> dict:
     """Update snapshot title and/or description."""
     snapshot = await service.update_snapshot_metadata(
@@ -182,12 +179,12 @@ async def update_snapshot(
 async def restore_snapshot(
     snapshot_id: str,
     background_tasks: BackgroundTasks,
+    db: DataBaseDep,
+    service: SnapshotServiceDep,
+    job_service: JobServiceDep,
     request: RestoreRequestDTO | None = None,
-    db: AsyncSession = Depends(get_db),
     async_mode: bool = Query(True, alias="async"),
     use_arq: bool = Query(True, description="Use Arq persistent queue (recommended) vs FastAPI BackgroundTasks"),
-    service: SnapshotService = Depends(get_snapshot_service),
-    job_service: JobService = Depends(get_job_service),
 ) -> dict:
     """
     Restore PV values from a snapshot to EPICS.
@@ -251,8 +248,8 @@ async def restore_snapshot(
 @router.delete("/{snapshot_id}", dependencies=[Security(require_write_access)])
 async def delete_snapshot(
     snapshot_id: str,
+    service: SnapshotServiceDep,
     deleteData: bool = Query(True),
-    service: SnapshotService = Depends(get_snapshot_service),
 ) -> dict:
     """Delete a snapshot."""
     try:
@@ -269,7 +266,7 @@ async def delete_snapshot(
 async def compare_snapshots(
     snapshot1_id: str,
     snapshot2_id: str,
-    service: SnapshotService = Depends(get_snapshot_service),
+    service: SnapshotServiceDep,
 ) -> dict:
     """Compare two snapshots and return differences."""
     try:

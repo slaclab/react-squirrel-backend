@@ -1,25 +1,24 @@
 from uuid import UUID
 
-from fastapi import Query, Depends, Security, APIRouter
+from fastapi import Query, Security, APIRouter
 from pydantic import BaseModel
 
 from app.schemas.tag import TagCreate, TagUpdate, TagGroupCreate, TagGroupUpdate
-from app.dependencies import get_tag_service, require_read_access, require_write_access
+from app.dependencies import TagServiceDep, require_read_access, require_write_access
 from app.api.responses import APIException, success_response
-from app.services.tag_service import TagService
 
 router = APIRouter(prefix="/tags", tags=["Tags"])
 
 
 @router.get("", dependencies=[Security(require_read_access)])
-async def get_all_tag_groups(service: TagService = Depends(get_tag_service)) -> dict:
+async def get_all_tag_groups(service: TagServiceDep) -> dict:
     """Get all tag groups with tag counts."""
     groups = await service.get_all_groups_summary()
     return success_response(groups)
 
 
 @router.get("/{group_id}", dependencies=[Security(require_read_access)])
-async def get_tag_group(group_id: str, service: TagService = Depends(get_tag_service)) -> dict:
+async def get_tag_group(group_id: str, service: TagServiceDep) -> dict:
     """Get tag group by ID with all tags."""
     try:
         UUID(group_id)
@@ -33,7 +32,7 @@ async def get_tag_group(group_id: str, service: TagService = Depends(get_tag_ser
 
 
 @router.post("", dependencies=[Security(require_write_access)])
-async def create_tag_group(data: TagGroupCreate, service: TagService = Depends(get_tag_service)) -> dict:
+async def create_tag_group(data: TagGroupCreate, service: TagServiceDep) -> dict:
     """Create a new tag group."""
     try:
         group = await service.create_group(data)
@@ -46,7 +45,7 @@ async def create_tag_group(data: TagGroupCreate, service: TagService = Depends(g
 async def update_tag_group(
     group_id: str,
     data: TagGroupUpdate,
-    service: TagService = Depends(get_tag_service),
+    service: TagServiceDep,
 ) -> dict:
     """Update a tag group."""
     try:
@@ -65,8 +64,8 @@ async def update_tag_group(
 @router.delete("/{group_id}", dependencies=[Security(require_write_access)])
 async def delete_tag_group(
     group_id: str,
+    service: TagServiceDep,
     force: bool = Query(False),
-    service: TagService = Depends(get_tag_service),
 ) -> dict:
     """Delete a tag group."""
     try:
@@ -83,8 +82,8 @@ async def delete_tag_group(
 async def add_tag_to_group(
     group_id: str,
     data: TagCreate,
+    service: TagServiceDep,
     skip_duplicates: bool = Query(False, description="Skip duplicate tags instead of raising error"),
-    service: TagService = Depends(get_tag_service),
 ) -> dict:
     """Add a tag to a group."""
     try:
@@ -105,7 +104,7 @@ async def update_tag(
     group_id: str,
     tag_id: str,
     data: TagUpdate,
-    service: TagService = Depends(get_tag_service),
+    service: TagServiceDep,
 ) -> dict:
     """Update a tag in a group."""
     try:
@@ -123,7 +122,7 @@ async def update_tag(
 async def remove_tag(
     group_id: str,
     tag_id: str,
-    service: TagService = Depends(get_tag_service),
+    service: TagServiceDep,
 ) -> dict:
     """Remove a tag from a group."""
     try:
@@ -153,7 +152,7 @@ class BulkTagImportResponse(BaseModel):
 
 
 @router.post("/bulk", response_model=dict)
-async def bulk_import_tags(data: BulkTagImportRequest, service: TagService = Depends(get_tag_service)):
+async def bulk_import_tags(data: BulkTagImportRequest, service: TagServiceDep):
     """Bulk import tags with duplicate handling."""
     groups_created = 0
     tags_created = 0

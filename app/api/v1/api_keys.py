@@ -1,23 +1,18 @@
 """API endpoints for API key management."""
 from fastapi import Depends, APIRouter, status
 
-from app.dependencies import (
-    get_api_key_service,
-    require_read_access,
-    require_write_access,
-)
+from app.dependencies import ApiKeyServiceDep, require_read_access, require_write_access
 from app.api.responses import APIException
 from app.schemas.common import ApiResultResponse
 from app.schemas.api_key import ApiKeyCreateDTO
-from app.services.api_key_service import ApiKeyService
 
 router = APIRouter(prefix="/api-keys", tags=["ApiKeys"])
 
 
 @router.get("", dependencies=[Depends(require_read_access)])
 async def list_all_keys(
+    service: ApiKeyServiceDep,
     active_only: bool = False,
-    service: ApiKeyService = Depends(get_api_key_service),
 ) -> ApiResultResponse:
     """List all API Keys, optionally filtered by active status."""
     keys = await service.list_keys(active_only)
@@ -27,7 +22,7 @@ async def list_all_keys(
 @router.post("", dependencies=[Depends(require_write_access)])
 async def create_api_key(
     data: ApiKeyCreateDTO,
-    service: ApiKeyService = Depends(get_api_key_service),
+    service: ApiKeyServiceDep,
 ) -> ApiResultResponse:
     """Create a new API Key."""
     try:
@@ -40,7 +35,7 @@ async def create_api_key(
 @router.delete("/{key_id}", dependencies=[Depends(require_write_access)])
 async def deactivate_api_key(
     key_id: str,
-    service: ApiKeyService = Depends(get_api_key_service),
+    service: ApiKeyServiceDep,
 ) -> ApiResultResponse:
     """Deactivate an API Key by ID."""
     try:
@@ -54,8 +49,8 @@ async def deactivate_api_key(
 
 @router.get("/count", dependencies=[Depends(require_read_access)])
 async def get_api_key_count(
+    service: ApiKeyServiceDep,
     active_only: bool = False,
-    service: ApiKeyService = Depends(get_api_key_service),
 ) -> ApiResultResponse:
     """Get the current number of API Keys."""
     count = await service.get_count(active_only)
