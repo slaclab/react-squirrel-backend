@@ -7,7 +7,7 @@ from app.schemas.api_key import ApiKeyDTO, ApiKeyCreateDTO, ApiKeyCreateResultDT
 router = APIRouter(prefix="/api-keys", tags=["ApiKeys"])
 
 
-@router.get("", dependencies=[Security(require_read_access)], response_model=list[ApiKeyDTO])
+@router.get("", dependencies=[Security(require_read_access)])
 async def list_all_keys(
     service: ApiKeyServiceDep,
     active_only: bool = False,
@@ -16,7 +16,7 @@ async def list_all_keys(
     return await service.list_keys(active_only)
 
 
-@router.post("", dependencies=[Security(require_write_access)], response_model=ApiKeyCreateResultDTO)
+@router.post("", dependencies=[Security(require_write_access)])
 async def create_api_key(
     data: ApiKeyCreateDTO,
     service: ApiKeyServiceDep,
@@ -28,7 +28,7 @@ async def create_api_key(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-@router.delete("/{key_id}", dependencies=[Security(require_write_access)], response_model=ApiKeyDTO)
+@router.delete("/{key_id}", dependencies=[Security(require_write_access)])
 async def deactivate_api_key(
     key_id: str,
     service: ApiKeyServiceDep,
@@ -45,7 +45,7 @@ async def deactivate_api_key(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-@router.get("/count", dependencies=[Security(require_read_access)], response_model=int)
+@router.get("/count", dependencies=[Security(require_read_access)])
 async def get_api_key_count(
     service: ApiKeyServiceDep,
     active_only: bool = False,

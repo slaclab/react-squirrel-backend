@@ -51,7 +51,6 @@ async def get_arq_pool():
 @router.get(
     "",
     dependencies=[Security(require_read_access)],
-    response_model=list[SnapshotSummaryDTO],
 )
 async def list_snapshots(
     service: SnapshotServiceDep,
@@ -66,7 +65,6 @@ async def list_snapshots(
 @router.get(
     "/{snapshot_id}",
     dependencies=[Security(require_read_access)],
-    response_model=SnapshotDTO,
 )
 async def get_snapshot(
     snapshot_id: str,
@@ -93,7 +91,6 @@ async def get_snapshot(
 @router.post(
     "",
     dependencies=[Security(require_write_access)],
-    response_model=JobCreatedDTO | SnapshotSummaryDTO,
 )
 async def create_snapshot(
     data: NewSnapshotDTO,
@@ -170,7 +167,6 @@ async def create_snapshot(
 @router.put(
     "/{snapshot_id}",
     dependencies=[Security(require_write_access)],
-    response_model=SnapshotSummaryDTO,
 )
 async def update_snapshot(
     snapshot_id: str,
@@ -193,7 +189,6 @@ async def update_snapshot(
 @router.post(
     "/{snapshot_id}/restore",
     dependencies=[Security(require_write_access)],
-    response_model=JobCreatedDTO | RestoreResultDTO,
 )
 async def restore_snapshot(
     snapshot_id: str,
@@ -261,7 +256,6 @@ async def restore_snapshot(
 @router.delete(
     "/{snapshot_id}",
     dependencies=[Security(require_write_access)],
-    response_model=bool,
 )
 async def delete_snapshot(
     snapshot_id: str,
@@ -282,7 +276,6 @@ async def delete_snapshot(
 @router.get(
     "/{snapshot1_id}/compare/{snapshot2_id}",
     dependencies=[Security(require_read_access)],
-    response_model=ComparisonResultDTO,
 )
 async def compare_snapshots(
     snapshot1_id: str,

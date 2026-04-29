@@ -32,7 +32,6 @@ router = APIRouter(prefix="/pvs", tags=["PVs"])
 @router.get(
     "",
     dependencies=[Security(require_read_access)],
-    response_model=list[PVElementDTO],
 )
 async def search_pvs(
     service: PVServiceDep,
@@ -46,7 +45,6 @@ async def search_pvs(
 @router.get(
     "/paged",
     dependencies=[Security(require_read_access)],
-    response_model=PagedResult[PVElementDTO],
 )
 async def search_pvs_paged(
     service: PVServiceDep,
@@ -84,7 +82,6 @@ async def search_pvs_paged(
 @router.post(
     "",
     dependencies=[Security(require_write_access)],
-    response_model=PVElementDTO,
 )
 async def create_pv(data: NewPVElementDTO, service: PVServiceDep) -> PVElementDTO:
     """Create a new PV."""
@@ -97,7 +94,6 @@ async def create_pv(data: NewPVElementDTO, service: PVServiceDep) -> PVElementDT
 @router.post(
     "/multi",
     dependencies=[Security(require_write_access)],
-    response_model=list[PVElementDTO],
 )
 async def create_multiple_pvs(
     data: list[NewPVElementDTO],
@@ -113,7 +109,6 @@ async def create_multiple_pvs(
 @router.put(
     "/{pv_id}",
     dependencies=[Security(require_write_access)],
-    response_model=PVElementDTO,
 )
 async def update_pv(
     pv_id: str,
@@ -134,7 +129,6 @@ async def update_pv(
 @router.delete(
     "/{pv_id}",
     dependencies=[Security(require_write_access)],
-    response_model=bool,
 )
 async def delete_pv(pv_id: str, service: PVServiceDep) -> bool:
     """Delete a PV."""
@@ -151,7 +145,6 @@ async def delete_pv(pv_id: str, service: PVServiceDep) -> bool:
 @router.get(
     "/search",
     dependencies=[Security(require_read_access)],
-    response_model=FilteredSearchResponse,
 )
 async def search_pvs_filtered(
     db: DataBaseDep,
@@ -208,7 +201,6 @@ async def search_pvs_filtered(
 @router.get(
     "/devices",
     dependencies=[Security(require_read_access)],
-    response_model=list[str],
 )
 async def get_all_devices(db: DataBaseDep) -> list[str]:
     """Get all unique device names for filtering."""
@@ -219,7 +211,6 @@ async def get_all_devices(db: DataBaseDep) -> list[str]:
 @router.get(
     "/live",
     dependencies=[Security(require_read_access)],
-    response_model=dict[str, PVCacheEntryResponse],
 )
 async def get_live_values(
     redis: RedisServiceDep,
@@ -236,7 +227,6 @@ async def get_live_values(
 @router.post(
     "/live",
     dependencies=[Security(require_read_access)],
-    response_model=dict[str, PVCacheEntryResponse],
 )
 async def get_live_values_post(request: LivePVRequest, redis: RedisServiceDep) -> dict[str, PVCacheEntryResponse]:
     """Get current values from Redis cache (instant) - POST version for large PV lists."""
@@ -250,7 +240,6 @@ async def get_live_values_post(request: LivePVRequest, redis: RedisServiceDep) -
 @router.get(
     "/live/all",
     dependencies=[Security(require_read_access)],
-    response_model=AllLiveValuesResponse,
 )
 async def get_all_live_values(redis: RedisServiceDep) -> AllLiveValuesResponse:
     """Get all cached PV values (for initial table load)."""
@@ -267,7 +256,6 @@ async def get_all_live_values(redis: RedisServiceDep) -> AllLiveValuesResponse:
 @router.get(
     "/cache/status",
     dependencies=[Security(require_read_access)],
-    response_model=CacheStatusResponse,
 )
 async def get_cache_status(redis: RedisServiceDep) -> CacheStatusResponse:
     """Get Redis cache status."""
@@ -281,11 +269,12 @@ async def get_cache_status(redis: RedisServiceDep) -> CacheStatusResponse:
 @router.get(
     "/test-epics",
     dependencies=[Security(require_read_access)],
-    response_model=EpicsTestResponse,
 )
 async def test_epics_connection(
     epics: EpicsServiceDep,
-    pv: str = Query("KLYS:LI22:31:KVAC", description="PV name to test"),
+    pv: str = Query(
+        "KLYS:LI22:31:KVAC", description="PV name to test; Defaults to KLYS:LI22:31:KVAC, a SLAC-specific PV"
+    ),
 ) -> EpicsTestResponse:
     """Test EPICS connectivity using aioca."""
     result = await epics.get_single(pv)

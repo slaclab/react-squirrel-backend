@@ -30,7 +30,7 @@ from app.services.pv_monitor import get_pv_monitor
 router = APIRouter(prefix="/health", tags=["Health"])
 
 
-@router.get("/heartbeat", response_model=HeartbeatResponse)
+@router.get("/heartbeat")
 async def get_heartbeat(redis: RedisServiceDep) -> HeartbeatResponse:
     """
     Simple heartbeat check for frontend polling.
@@ -71,7 +71,6 @@ async def get_heartbeat(redis: RedisServiceDep) -> HeartbeatResponse:
 @router.get(
     "/monitor",
     dependencies=[Security(require_read_access)],
-    response_model=MonitorHealthResponse,
 )
 async def get_monitor_health(redis: RedisServiceDep) -> MonitorHealthResponse:
     """
@@ -115,7 +114,6 @@ async def get_monitor_health(redis: RedisServiceDep) -> MonitorHealthResponse:
 @router.get(
     "/watchdog",
     dependencies=[Security(require_read_access)],
-    response_model=WatchdogStatsResponse,
 )
 async def get_watchdog_stats() -> WatchdogStatsResponse:
     """
@@ -145,7 +143,6 @@ async def get_watchdog_stats() -> WatchdogStatsResponse:
 @router.post(
     "/watchdog/check",
     dependencies=[Security(require_write_access)],
-    response_model=WatchdogStatsResponse,
 )
 async def force_watchdog_check() -> WatchdogStatsResponse:
     """
@@ -176,7 +173,6 @@ async def force_watchdog_check() -> WatchdogStatsResponse:
 @router.get(
     "/summary",
     dependencies=[Security(require_read_access)],
-    response_model=HealthSummaryResponse,
 )
 async def get_health_summary(redis: RedisServiceDep) -> HealthSummaryResponse:
     """
@@ -266,7 +262,6 @@ async def get_health_summary(redis: RedisServiceDep) -> HealthSummaryResponse:
 @router.get(
     "/disconnected",
     dependencies=[Security(require_read_access)],
-    response_model=DisconnectedPVsResponse,
 )
 async def get_disconnected_pvs(redis: RedisServiceDep) -> DisconnectedPVsResponse:
     """
@@ -285,7 +280,6 @@ async def get_disconnected_pvs(redis: RedisServiceDep) -> DisconnectedPVsRespons
 @router.get(
     "/stale",
     dependencies=[Security(require_read_access)],
-    response_model=StalePVsResponse,
 )
 async def get_stale_pvs(
     redis: RedisServiceDep,
@@ -308,7 +302,6 @@ async def get_stale_pvs(
 @router.get(
     "/circuits",
     dependencies=[Security(require_read_access)],
-    response_model=CircuitStatusResponse,
 )
 async def get_circuit_breaker_status() -> CircuitStatusResponse:
     """
@@ -365,7 +358,6 @@ async def get_circuit_breaker_status() -> CircuitStatusResponse:
 @router.post(
     "/circuits/{circuit_name}/close",
     dependencies=[Security(require_write_access)],
-    response_model=CircuitActionResponse,
 )
 async def force_close_circuit(circuit_name: str) -> CircuitActionResponse:
     """
@@ -387,7 +379,6 @@ async def force_close_circuit(circuit_name: str) -> CircuitActionResponse:
 @router.post(
     "/circuits/{circuit_name}/open",
     dependencies=[Security(require_write_access)],
-    response_model=CircuitActionResponse,
 )
 async def force_open_circuit(circuit_name: str) -> CircuitActionResponse:
     """
@@ -409,7 +400,6 @@ async def force_open_circuit(circuit_name: str) -> CircuitActionResponse:
 @router.get(
     "/monitor/status",
     dependencies=[Security(require_read_access)],
-    response_model=MonitorProcessStatusResponse,
 )
 async def monitor_process_status(redis: RedisServiceDep) -> MonitorProcessStatusResponse:
     """

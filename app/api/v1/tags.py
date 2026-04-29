@@ -20,7 +20,6 @@ router = APIRouter(prefix="/tags", tags=["Tags"])
 @router.get(
     "",
     dependencies=[Security(require_read_access)],
-    response_model=list[TagGroupSummaryDTO],
 )
 async def get_all_tag_groups(service: TagServiceDep) -> list[TagGroupSummaryDTO]:
     """Get all tag groups with tag counts."""
@@ -30,7 +29,6 @@ async def get_all_tag_groups(service: TagServiceDep) -> list[TagGroupSummaryDTO]
 @router.get(
     "/{group_id}",
     dependencies=[Security(require_read_access)],
-    response_model=list[TagGroupDTO],
 )
 async def get_tag_group(group_id: str, service: TagServiceDep) -> list[TagGroupDTO]:
     """Get tag group by ID with all tags."""
@@ -48,7 +46,6 @@ async def get_tag_group(group_id: str, service: TagServiceDep) -> list[TagGroupD
 @router.post(
     "",
     dependencies=[Security(require_write_access)],
-    response_model=TagGroupDTO,
 )
 async def create_tag_group(data: TagGroupCreate, service: TagServiceDep) -> TagGroupDTO:
     """Create a new tag group."""
@@ -61,7 +58,6 @@ async def create_tag_group(data: TagGroupCreate, service: TagServiceDep) -> TagG
 @router.put(
     "/{group_id}",
     dependencies=[Security(require_write_access)],
-    response_model=TagGroupDTO,
 )
 async def update_tag_group(
     group_id: str,
@@ -85,7 +81,6 @@ async def update_tag_group(
 @router.delete(
     "/{group_id}",
     dependencies=[Security(require_write_access)],
-    response_model=bool,
 )
 async def delete_tag_group(
     group_id: str,
@@ -106,7 +101,6 @@ async def delete_tag_group(
 @router.post(
     "/{group_id}/tags",
     dependencies=[Security(require_write_access)],
-    response_model=AddTagResponse,
 )
 async def add_tag_to_group(
     group_id: str,
@@ -131,7 +125,6 @@ async def add_tag_to_group(
 @router.put(
     "/{group_id}/tags/{tag_id}",
     dependencies=[Security(require_write_access)],
-    response_model=TagGroupDTO,
 )
 async def update_tag(
     group_id: str,
@@ -154,7 +147,6 @@ async def update_tag(
 @router.delete(
     "/{group_id}/tags/{tag_id}",
     dependencies=[Security(require_write_access)],
-    response_model=TagGroupDTO,
 )
 async def remove_tag(
     group_id: str,
@@ -188,7 +180,7 @@ class BulkTagImportResponse(BaseModel):
     warnings: list[str]
 
 
-@router.post("/bulk", response_model=BulkTagImportResponse)
+@router.post("/bulk")
 async def bulk_import_tags(
     data: BulkTagImportRequest,
     service: TagServiceDep,
