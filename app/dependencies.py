@@ -12,7 +12,7 @@ from app.services.pv_service import PVService
 from app.services.job_service import JobService
 from app.services.tag_service import TagService
 from app.services.epics_service import EpicsService, get_epics_service
-from app.services.redis_service import get_redis_service
+from app.services.redis_service import RedisService, get_redis_service
 from app.services.api_key_service import ApiKeyService
 from app.services.snapshot_service import SnapshotService
 
@@ -20,35 +20,49 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 # ---------------------------------------------------------------------------
-# Service factory dependencies
+# Service dependencies
 # ---------------------------------------------------------------------------
 
+DataBaseDep = Annotated[AsyncSession, Depends(get_db)]
 
-def get_pv_service(db: AsyncSession = Depends(get_db)) -> PVService:
-    """Get PV service instance."""
+EpicsServiceDep = Annotated[EpicsService, Depends(get_epics_service)]
+
+RedisServiceDep = Annotated[RedisService, Depends(get_redis_service)]
+
+
+def get_pv_service(db: DataBaseDep) -> PVService:
     return PVService(db)
 
 
-def get_snapshot_service(
-    db: AsyncSession = Depends(get_db), epics: EpicsService = Depends(get_epics_service)
-) -> SnapshotService:
-    """Get Snapshot service instance (Redis attached from the module singleton)."""
-    return SnapshotService(db, epics, get_redis_service())
+PVServiceDep = Annotated[PVService, Depends(get_pv_service)]
 
 
-def get_tag_service(db: AsyncSession = Depends(get_db)) -> TagService:
-    """Get Tag service instance."""
+def get_tag_service(db: DataBaseDep) -> TagService:
     return TagService(db)
 
 
-def get_api_key_service(db: AsyncSession = Depends(get_db)) -> ApiKeyService:
-    """Get API key service instance."""
+TagServiceDep = Annotated[TagService, Depends(get_tag_service)]
+
+
+def get_api_key_service(db: DataBaseDep) -> ApiKeyService:
     return ApiKeyService(db)
 
 
-def get_job_service(db: AsyncSession = Depends(get_db)) -> JobService:
-    """Get Job service instance."""
+ApiKeyServiceDep = Annotated[ApiKeyService, Depends(get_api_key_service)]
+
+
+def get_job_service(db: DataBaseDep) -> JobService:
     return JobService(db)
+
+
+JobServiceDep = Annotated[JobService, Depends(get_job_service)]
+
+
+def get_snapshot_service(db: DataBaseDep, epics: EpicsServiceDep, redis: RedisServiceDep) -> SnapshotService:
+    return SnapshotService(db, epics, redis)
+
+
+SnapshotServiceDep = Annotated[SnapshotService, Depends(get_snapshot_service)]
 
 
 # ---------------------------------------------------------------------------
@@ -57,10 +71,10 @@ def get_job_service(db: AsyncSession = Depends(get_db)) -> JobService:
 
 
 async def get_api_key(
-    db: Annotated[AsyncSession, Depends(get_db)], api_key_header: Annotated[str, Security(api_key_header)]
+    service: ApiKeyServiceDep,
+    api_key_header: Annotated[str, Security(api_key_header)],
 ) -> ApiKeyDTO | None:
     if api_key_header:
-        service = ApiKeyService(db)
         api_key_dto = await service.get_by_token(api_key_header)
 
         if api_key_dto and api_key_dto.isActive:
@@ -98,11 +112,10 @@ def require_write_access(api_key_dto: Annotated[ApiKeyDTO, Security(get_api_key)
 # ---------------------------------------------------------------------------
 
 
-async def ws_get_api_key(websocket: WebSocket, db: AsyncSession = Security(get_db)) -> ApiKeyDTO:
+async def ws_get_api_key(websocket: WebSocket, service: ApiKeyServiceDep) -> ApiKeyDTO:
     """WebSocket variant of get_api_key — raises WebSocketException on failure."""
     key_value = websocket.headers.get("X-API-Key")
     if key_value:
-        service = ApiKeyService(db)
         api_key_dto = await service.get_by_token(key_value)
 
         if api_key_dto and api_key_dto.isActive:
