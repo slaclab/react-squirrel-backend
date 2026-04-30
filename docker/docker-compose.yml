@@ -42,7 +42,7 @@ services:
 
       SQUIRREL_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       SQUIRREL_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      SQUIRREL_DEBUG: "${SQUIRREL_DEBUG}"
+      SQUIRREL_DEBUG: "${SQUIRREL_DEBUG:-false}"
 
       EPICS_CA_AUTO_ADDR_LIST: "${EPICS_CA_AUTO_ADDR_LIST}"
       EPICS_CA_ADDR_LIST: "${EPICS_CA_ADDR_LIST}"
@@ -58,6 +58,8 @@ services:
     volumes:
       - ../app:/app/app
       - ../tests:/app/tests
+      - ../scripts:/app/scripts
+      - /tmp/squirrel-logs:/tmp/squirrel-logs
       - ../scripts:/app/scripts
     depends_on:
       db:
@@ -79,7 +81,7 @@ services:
     environment:
       SQUIRREL_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       SQUIRREL_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      SQUIRREL_DEBUG: "${SQUIRREL_DEBUG}"
+      SQUIRREL_DEBUG: "${SQUIRREL_DEBUG:-false}"
 
       EPICS_CA_AUTO_ADDR_LIST: "${EPICS_CA_AUTO_ADDR_LIST}"
       EPICS_CA_ADDR_LIST: "${EPICS_CA_ADDR_LIST}"
@@ -92,6 +94,7 @@ services:
       EPICS_PVA_BROADCAST_PORT: "${EPICS_PVA_BROADCAST_PORT}"
     volumes:
       - ../app:/app/app
+      - /tmp/squirrel-logs:/tmp/squirrel-logs
     depends_on:
       db:
         condition: service_healthy
@@ -117,7 +120,7 @@ services:
     environment:
       SQUIRREL_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       SQUIRREL_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      SQUIRREL_DEBUG: "${SQUIRREL_DEBUG}"
+      SQUIRREL_DEBUG: "${SQUIRREL_DEBUG:-false}"
 
       # EPICS Channel Access (needed for snapshot restore)
       EPICS_CA_AUTO_ADDR_LIST: "${EPICS_CA_AUTO_ADDR_LIST}"
@@ -126,6 +129,7 @@ services:
       EPICS_CA_SERVER_PORT: "${EPICS_CA_SERVER_PORT}"
     volumes:
       - ../app:/app/app
+      - /tmp/squirrel-logs:/tmp/squirrel-logs
     depends_on:
       db:
         condition: service_healthy
@@ -149,7 +153,7 @@ services:
     environment:
       SQUIRREL_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       SQUIRREL_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      SQUIRREL_DEBUG: "${SQUIRREL_DEBUG}"
+      SQUIRREL_DEBUG: "${SQUIRREL_DEBUG:-false}"
       # Enable embedded monitor for backward compatibility
       SQUIRREL_EMBEDDED_MONITOR: "true"
 
@@ -167,6 +171,7 @@ services:
     volumes:
       - ../app:/app/app
       - ../tests:/app/tests
+      - /tmp/squirrel-logs:/tmp/squirrel-logs
     depends_on:
       db:
         condition: service_healthy

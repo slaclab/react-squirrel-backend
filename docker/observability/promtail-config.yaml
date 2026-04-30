@@ -1,0 +1,44 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: squirrel-backend
+    static_configs:
+      - targets: ["localhost"]
+        labels:
+          app: squirrel-backend
+          job: squirrel-backend
+          __path__: /tmp/squirrel-logs/backend.log
+    pipeline_stages:
+      - match:
+          selector: '{app="squirrel-backend"}'
+          stages:
+            - regex:
+                expression: '.* - analytics - .* - (?P<json>\{.*\})'
+            - json:
+                source: json
+                expressions:
+                  event: event
+                  source: source
+                  route: route
+                  path: path
+                  api_key_app: api_key_app
+                  session_id: session_id
+                  timestamp: timestamp
+            - labels:
+                event: event
+                source: source
+                route: route
+                api_key_app: api_key_app
+            - timestamp:
+                source: timestamp
+                format: RFC3339Nano
+            - output:
+                source: json

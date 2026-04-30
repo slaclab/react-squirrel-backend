@@ -21,12 +21,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.api.v1.router import router as v1_router
+from app.logging_config import configure_logging
 from app.api.v1.websocket import get_diff_manager
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+configure_logging()
 logger = logging.getLogger(__name__)
 
 settings = get_settings()

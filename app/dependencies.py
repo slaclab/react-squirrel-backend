@@ -85,6 +85,22 @@ async def get_api_key(
     )
 
 
+async def get_optional_api_key(
+    db: Annotated[AsyncSession, Depends(get_db)], api_key_header: Annotated[str, Security(api_key_header)]
+) -> ApiKeyDTO | None:
+    """Optional API key lookup for endpoints that allow anonymous access."""
+    if not api_key_header:
+        return None
+
+    service = ApiKeyService(db)
+    api_key_dto = await service.get_by_token(api_key_header)
+
+    if api_key_dto and api_key_dto.isActive:
+        return api_key_dto
+
+    return None
+
+
 def require_read_access(api_key_dto: Annotated[ApiKeyDTO, Security(get_api_key)]):
     """Dependency that requires a valid, active API Key with read access."""
     if not api_key_dto.readAccess:

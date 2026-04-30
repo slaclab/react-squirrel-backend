@@ -1,0 +1,38 @@
+# Promtail snippet for Squirrel analytics logs (Loki JSON parsing)
+# Assumes backend logs contain JSON in the message field with the analytics logger name.
+# Example log line:
+# 2026-04-22 12:00:00,000 - analytics - INFO - {"event":"page_view", ...}
+
+scrape_configs:
+  - job_name: squirrel-backend
+    static_configs:
+      - targets: ["localhost"]
+        labels:
+          app: squirrel-backend
+          __path__: /tmp/squirrel-logs/backend.log
+    pipeline_stages:
+      - match:
+          selector: '{app="squirrel-backend"}'
+          stages:
+            - regex:
+                expression: '.* - analytics - .* - (?P<json>\{.*\})'
+            - json:
+                source: json
+                expressions:
+                  event: event
+                  source: source
+                  route: route
+                  path: path
+                  api_key_app: api_key_app
+                  session_id: session_id
+                  timestamp: timestamp
+            - labels:
+                event: event
+                source: source
+                route: route
+                api_key_app: api_key_app
+            - timestamp:
+                source: timestamp
+                format: RFC3339Nano
+            - output:
+                source: json

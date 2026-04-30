@@ -1,0 +1,110 @@
+{
+  "uid": "squirrel-analytics",
+  "title": "Squirrel Usage Analytics",
+  "schemaVersion": 38,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "30s",
+  "tags": ["squirrel", "analytics"],
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "type": "datasource",
+        "name": "Loki",
+        "label": "Loki",
+        "query": "loki",
+        "current": {
+          "text": "Loki",
+          "value": "Loki"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Page Views (All)",
+      "datasource": "${Loki}",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"squirrel-backend\", event=\"page_view\"}[$__interval]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "type": "bargauge",
+      "title": "Top Routes (Page Views)",
+      "datasource": "${Loki}",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (route) (count_over_time({app=\"squirrel-backend\", event=\"page_view\"}[$__range])))",
+          "refId": "A"
+        }
+      ],
+      "options": { "displayMode": "gradient" }
+    },
+    {
+      "type": "timeseries",
+      "title": "Snapshot Create Success vs Fail",
+      "datasource": "${Loki}",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (event) (count_over_time({app=\"squirrel-backend\", event=~\"snapshot_create_(completed|failed)\"}[$__interval]))",
+          "refId": "A",
+          "legendFormat": "{{event}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Snapshot Restore Success vs Fail",
+      "datasource": "${Loki}",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (event) (count_over_time({app=\"squirrel-backend\", event=~\"snapshot_restore_(completed|failed)\"}[$__interval]))",
+          "refId": "A",
+          "legendFormat": "{{event}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "PV Browser Queries",
+      "datasource": "${Loki}",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"squirrel-backend\", event=\"pv_browse_query\"}[$__interval]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Tag Changes",
+      "datasource": "${Loki}",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (event) (count_over_time({app=\"squirrel-backend\", event=~\"tag(_group)?_(created|updated|deleted)\"}[$__interval]))",
+          "refId": "A",
+          "legendFormat": "{{event}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    }
+  ]
+}

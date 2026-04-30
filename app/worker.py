@@ -21,7 +21,9 @@ from arq.connections import RedisSettings
 
 from app.tasks import create_snapshot_task, restore_snapshot_task
 from app.config import get_settings
+from app.logging_config import configure_logging
 
+configure_logging()
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
