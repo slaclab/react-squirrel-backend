@@ -1,7 +1,6 @@
 from fastapi import Depends, Request, APIRouter
 
 from app.dependencies import get_optional_api_key
-from app.api.responses import success_response
 from app.schemas.analytics import AnalyticsEventCreateDTO
 from app.services.analytics_service import log_analytics_event
 
@@ -13,7 +12,7 @@ async def create_event(
     data: AnalyticsEventCreateDTO,
     request: Request,
     api_key=Depends(get_optional_api_key),
-) -> dict:
+) -> bool:
     log_analytics_event(
         data.event,
         source="frontend",
@@ -29,4 +28,4 @@ async def create_event(
         },
     )
 
-    return success_response(True)
+    return True
