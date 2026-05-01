@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.api.v1.router import router as v1_router
+from app.services.elog import shutdown_elog_service
 from app.api.v1.websocket import get_diff_manager
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
@@ -109,6 +110,12 @@ async def lifespan(app: FastAPI):
     # Shutdown EPICS
     await epics.shutdown()
     logger.info("EPICS service shut down")
+
+    # Close e-log adapter HTTP client, if initialized
+    try:
+        await shutdown_elog_service()
+    except Exception as e:
+        logger.error(f"Error shutting down e-log adapter: {e}")
 
     logger.info("Squirrel API shutdown complete")
 
