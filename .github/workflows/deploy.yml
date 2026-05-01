@@ -1,0 +1,78 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy (e.g., v1.2.0 or main-abc1234)'
+        required: true
+        type: string
+      deploy_to_container_dev:
+        description: 'Deploy to CONTAINER_DEV'
+        type: boolean
+        default: false
+      deploy_to_container_lcls:
+        description: 'Deploy to CONTAINER_LCLS'
+        type: boolean
+        default: false
+      deploy_to_container_testfac:
+        description: 'Deploy to CONTAINER_TESTFAC'
+        type: boolean
+        default: false
+      deploy_to_container_facet:
+        description: 'Deploy to CONTAINER_FACET'
+        type: boolean
+        default: false
+      migration_command:
+        description: 'Migration command (default: alembic upgrade head). For rollbacks use e.g. alembic downgrade <revision>'
+        required: false
+        type: string
+        default: 'alembic upgrade head'
+      force_deploy:
+        description: 'Force deploy even if same tag is already running'
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Dry run (ansible --check, no actual changes)'
+        type: boolean
+        default: false
+
+permissions:
+  deployments: write
+  contents: read
+  actions: read
+  packages: read
+
+jobs:
+  deploy:
+    uses: slaclab/software-factory/.github/workflows/request-deployment.yml@main
+    with:
+      component_name: ${{ github.event.repository.name }}
+      tag: ${{ inputs.image_tag }}
+      playbook: container_module/container_deploy.yml
+      deploy_to_container_dev: ${{ inputs.deploy_to_container_dev }}
+      deploy_to_container_lcls: ${{ inputs.deploy_to_container_lcls }}
+      deploy_to_container_testfac: ${{ inputs.deploy_to_container_testfac }}
+      deploy_to_container_facet: ${{ inputs.deploy_to_container_facet }}
+      docker_network: squirrel-net
+      migration_command: ${{ inputs.migration_command }}
+      health_check_path: /health
+      force_deploy: ${{ inputs.force_deploy }}
+      dry_run: ${{ inputs.dry_run }}
+    secrets:
+      DATABASE_URL: >-
+        ${{ inputs.deploy_to_container_dev == true
+            && secrets.DEV_DATABASE_URL
+            || inputs.deploy_to_container_testfac == true
+            && secrets.TESTFAC_DATABASE_URL
+            || inputs.deploy_to_container_facet == true
+            && secrets.FACET_DATABASE_URL
+            || secrets.PROD_DATABASE_URL }}
+      REDIS_URL: >-
+        ${{ inputs.deploy_to_container_dev == true
+            && secrets.DEV_REDIS_URL
+            || inputs.deploy_to_container_testfac == true
+            && secrets.TESTFAC_REDIS_URL
+            || inputs.deploy_to_container_facet == true
+            && secrets.FACET_REDIS_URL
+            || secrets.PROD_REDIS_URL }}

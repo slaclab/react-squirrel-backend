@@ -54,8 +54,9 @@ jobs:
 
   deploy:
     needs: build-and-push
-    uses: ad-build-test/build-system-playbooks/.github/workflows/request-deployment.yml@main
+    uses: slaclab/software-factory/.github/workflows/request-deployment.yml@main
     with:
+      component_name: ${{ github.event.repository.name }}
       deploy_to_container_dev: true
       tag: ${{ needs.build-and-push.outputs.image_tag }}
       playbook: container_module/container_deploy.yml
@@ -63,5 +64,5 @@ jobs:
       migration_command: alembic upgrade head
       health_check_path: /health
     secrets:
-      database_url: ${{ secrets.DEV_DATABASE_URL }}
-      redis_url: ${{ secrets.DEV_REDIS_URL }}
+      DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+      REDIS_URL: ${{ secrets.DEV_REDIS_URL }}
