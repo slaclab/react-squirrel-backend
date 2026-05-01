@@ -2,12 +2,10 @@
 Pytest configuration and fixtures for squirrel-backend tests.
 """
 
-import asyncio
 import logging
 from datetime import datetime
-from collections.abc import Generator, AsyncGenerator
+from collections.abc import AsyncGenerator
 
-import pytest
 import asyncpg
 import pytest_asyncio
 import fakeredis.aioredis as aioredis_fake
@@ -34,14 +32,6 @@ _p4p_logger.handlers = [logging.NullHandler()]
 TEST_DATABASE_URL = "postgresql+asyncpg://squirrel:squirrel@localhost:5432/squirrel_test"
 # Admin DSN used to create squirrel_test if it doesn't exist; uses the built-in `postgres` database
 _ADMIN_DSN = "postgresql://squirrel:squirrel@localhost:5432/postgres"
-
-
-@pytest.fixture(scope="session")
-def event_loop() -> Generator:
-    """Create event loop for async tests."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest_asyncio.fixture(scope="session")

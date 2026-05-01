@@ -1,0 +1,39 @@
+services:
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: squirrel-loki
+    command: -config.file=/etc/loki/config.yaml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/loki
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: squirrel-promtail
+    command: -config.file=/etc/promtail/config.yaml
+    volumes:
+      - ./promtail-config.yaml:/etc/promtail/config.yaml:ro
+      # Bind-mount wherever the backend writes logs on the host.
+      # Update this path to match the backend log output location.
+      - /tmp/squirrel-logs:/tmp/squirrel-logs:ro
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: squirrel-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - loki
+
+volumes:
+  loki_data:
+  grafana_data:

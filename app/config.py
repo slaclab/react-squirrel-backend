@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     # Performance
     bulk_insert_batch_size: int = 5000
 
+    # Analytics
+    analytics_enabled: bool = True
+
     class Config:
         env_file = ".env"
         env_prefix = "SQUIRREL_"

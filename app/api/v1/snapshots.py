@@ -25,6 +25,7 @@ from app.schemas.snapshot import (
     ComparisonResultDTO,
 )
 from app.services.background_tasks import run_snapshot_restore, run_snapshot_creation
+from app.services.analytics_service import log_analytics_event
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -140,6 +141,16 @@ async def create_snapshot(
                         use_cache=use_cache,
                     )
                     logger.info(f"Enqueued snapshot job to Arq: {job.id}")
+                    log_analytics_event(
+                        "snapshot_create_requested",
+                        source="backend",
+                        properties={
+                            "job_id": str(job.id),
+                            "async_mode": True,
+                            "use_cache": use_cache,
+                            "queue": "arq",
+                        },
+                    )
                     return JobCreatedDTO(
                         jobId=job.id,
                         message=f"Snapshot creation queued for '{data.title}'"
@@ -151,6 +162,16 @@ async def create_snapshot(
         # Fallback to FastAPI BackgroundTasks
         background_tasks.add_task(run_snapshot_creation, job.id, data.title, data.description, use_cache)
         logger.info(f"Scheduled snapshot job via BackgroundTasks: {job.id}")
+        log_analytics_event(
+            "snapshot_create_requested",
+            source="backend",
+            properties={
+                "job_id": str(job.id),
+                "async_mode": True,
+                "use_cache": use_cache,
+                "queue": "background_tasks",
+            },
+        )
 
         return JobCreatedDTO(
             jobId=job.id,
@@ -160,8 +181,21 @@ async def create_snapshot(
     else:
         # Synchronous mode (legacy behavior)
         if use_cache:
-            return await service.create_snapshot_from_cache(data)
-        return await service.create_snapshot(data)
+            snapshot = await service.create_snapshot_from_cache(data)
+        else:
+            snapshot = await service.create_snapshot(data)
+
+        log_analytics_event(
+            "snapshot_create_completed",
+            source="backend",
+            properties={
+                "async_mode": False,
+                "use_cache": use_cache,
+                "snapshot_id": str(snapshot.id),
+                "pv_count": snapshot.pvCount,
+            },
+        )
+        return snapshot
 
 
 @router.put(
@@ -235,6 +269,17 @@ async def restore_snapshot(
                         pv_ids=pv_ids,
                     )
                     logger.info(f"Enqueued restore job to Arq: {job.id}")
+                    log_analytics_event(
+                        "snapshot_restore_requested",
+                        source="backend",
+                        properties={
+                            "job_id": str(job.id),
+                            "snapshot_id": snapshot_id,
+                            "async_mode": True,
+                            "pv_count": len(pv_ids) if pv_ids else None,
+                            "queue": "arq",
+                        },
+                    )
                     return JobCreatedDTO(
                         jobId=job.id,
                         message=f"Snapshot restore queued ({snapshot_id})",
@@ -245,12 +290,35 @@ async def restore_snapshot(
         # Fallback to FastAPI BackgroundTasks
         background_tasks.add_task(run_snapshot_restore, str(job.id), snapshot_id, pv_ids)
         logger.info(f"Scheduled restore job via BackgroundTasks: {job.id}")
+        log_analytics_event(
+            "snapshot_restore_requested",
+            source="backend",
+            properties={
+                "job_id": str(job.id),
+                "snapshot_id": snapshot_id,
+                "async_mode": True,
+                "pv_count": len(pv_ids) if pv_ids else None,
+                "queue": "background_tasks",
+            },
+        )
         return JobCreatedDTO(
             jobId=job.id,
             message=f"Snapshot restore started ({snapshot_id})",
         )
 
-    return await service.restore_snapshot(snapshot_id, request)
+    result = await service.restore_snapshot(snapshot_id, request)
+    log_analytics_event(
+        "snapshot_restore_completed",
+        source="backend",
+        properties={
+            "async_mode": False,
+            "snapshot_id": snapshot_id,
+            "success_count": result.successCount,
+            "failure_count": result.failureCount,
+            "total_pvs": result.totalPVs,
+        },
+    )
+    return result
 
 
 @router.delete(
@@ -270,6 +338,14 @@ async def delete_snapshot(
     success = await service.delete_snapshot(snapshot_id)
     if not success:
         raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id} not found")
+    log_analytics_event(
+        "snapshot_deleted",
+        source="backend",
+        properties={
+            "snapshot_id": snapshot_id,
+            "delete_data": deleteData,
+        },
+    )
     return True
 
 

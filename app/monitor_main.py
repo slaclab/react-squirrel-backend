@@ -16,6 +16,7 @@ import logging
 
 from app.config import get_settings
 from app.db.session import async_session_maker
+from app.logging_config import configure_logging
 from app.services.watchdog import get_watchdog
 from app.services.pv_monitor import get_pv_monitor
 from app.services.pv_protocol import is_unprefixed, parse_pv_name
@@ -24,7 +25,7 @@ from app.services.redis_service import get_redis_service
 from app.services.pvaccess_monitor import get_pvaccess_monitor
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+configure_logging()
 logger = logging.getLogger(__name__)
 
 settings = get_settings()

@@ -8,6 +8,7 @@ from app.schemas.snapshot import NewSnapshotDTO, RestoreRequestDTO
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
 from app.services.snapshot_service import SnapshotService
+from app.services.analytics_service import log_analytics_event
 from app.repositories.job_repository import JobRepository
 
 logger = logging.getLogger(__name__)
@@ -99,9 +100,30 @@ async def run_snapshot_creation(
             await session.commit()
 
             logger.info(f"Background task completed for job {job_id}: Snapshot {result.id} created")
+            log_analytics_event(
+                "snapshot_create_completed",
+                source="backend",
+                properties={
+                    "job_id": job_id,
+                    "snapshot_id": str(result.id),
+                    "use_cache": use_cache,
+                    "pv_count": result.pvCount,
+                    "queue": "background_tasks",
+                },
+            )
 
         except Exception as e:
             logger.exception(f"Background task failed for job {job_id}: {e}")
+            log_analytics_event(
+                "snapshot_create_failed",
+                source="backend",
+                properties={
+                    "job_id": job_id,
+                    "use_cache": use_cache,
+                    "queue": "background_tasks",
+                    "error": str(e),
+                },
+            )
             error_msg = f"{type(e).__name__}: {str(e)}"
             try:
                 await session.rollback()
@@ -199,9 +221,31 @@ async def run_snapshot_restore(
                 f"{result.successCount}/{result.totalPVs} succeeded, "
                 f"{result.failureCount} failed"
             )
+            log_analytics_event(
+                "snapshot_restore_completed",
+                source="backend",
+                properties={
+                    "job_id": job_id,
+                    "snapshot_id": snapshot_id,
+                    "success_count": result.successCount,
+                    "failure_count": result.failureCount,
+                    "total_pvs": result.totalPVs,
+                    "queue": "background_tasks",
+                },
+            )
 
         except Exception as e:
             logger.exception(f"Background restore failed for job {job_id}: {e}")
+            log_analytics_event(
+                "snapshot_restore_failed",
+                source="backend",
+                properties={
+                    "job_id": job_id,
+                    "snapshot_id": snapshot_id,
+                    "queue": "background_tasks",
+                    "error": str(e),
+                },
+            )
             error_msg = f"{type(e).__name__}: {str(e)}"
             try:
                 await session.rollback()
