@@ -4,7 +4,6 @@ from app.models.tag import TagGroup, Tag
 from app.models.pv import PV, pv_tag
 from app.models.snapshot import Snapshot, SnapshotValue
 from app.models.job import Job, JobStatus, JobType
-from app.models.elog_last_entry import ElogLastEntry
 
 __all__ = [
     "Base",
@@ -18,5 +17,4 @@ __all__ = [
     "Job",
     "JobStatus",
     "JobType",
-    "ElogLastEntry",
 ]

@@ -12,12 +12,7 @@ from fastapi import Query, Depends, Security, APIRouter, HTTPException
 from pydantic import Field, BaseModel
 
 from app.config import Settings, get_settings
-from app.dependencies import (
-    DataBaseDep,
-    get_api_key,
-    require_read_access,
-    require_write_access,
-)
+from app.dependencies import get_api_key, require_read_access, require_write_access
 from app.services.elog import (
     ElogTag,
     ElogUser,
@@ -29,7 +24,6 @@ from app.services.elog import (
     get_elog_service,
 )
 from app.schemas.api_key import ApiKeyDTO
-from app.services.elog.last_entry import get_last_entry_id, upsert_last_entry
 
 logger = logging.getLogger(__name__)
 
@@ -67,12 +61,6 @@ class CreateEntryRequestDTO(BaseModel):
     additionalAuthors: list[str] = Field(default_factory=list)
     important: bool = False
     eventAt: datetime | None = None
-
-
-class LastEntryResponseDTO(BaseModel):
-    """The most recent entry id this api key posted/followed-up for a logbook set."""
-
-    entryId: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -168,20 +156,6 @@ async def list_tags(
 
 
 @router.get(
-    "/last-entry",
-    dependencies=[Security(require_read_access)],
-)
-async def get_last_entry(
-    api_key: Annotated[ApiKeyDTO, Security(get_api_key)],
-    db: DataBaseDep,
-    logbook: Annotated[list[str], Query(min_length=1)],
-) -> LastEntryResponseDTO:
-    """Return the last entry id this api key posted/followed-up for the given logbook set."""
-    entry_id = await get_last_entry_id(db, api_key_id=api_key.id, logbooks=list(logbook))
-    return LastEntryResponseDTO(entryId=entry_id)
-
-
-@router.get(
     "/recent-entries",
     dependencies=[Security(require_read_access)],
 )
@@ -206,7 +180,6 @@ async def create_entry(
     payload: CreateEntryRequestDTO,
     api_key: Annotated[ApiKeyDTO, Security(get_api_key)],
     adapter: Annotated[ElogAdapter | None, Depends(_get_elog_adapter)],
-    db: DataBaseDep,
 ) -> ElogEntryResult:
     """Create an e-log entry, or a follow-up if ``followsUpEntryId`` is set."""
     adapter = _require_adapter(adapter)
@@ -230,15 +203,5 @@ async def create_entry(
             result = await _proxy_upstream(adapter.create_entry(request))
     except NotImplementedError as exc:
         raise HTTPException(status_code=501, detail=str(exc) or "Follow-up unsupported") from exc
-
-    try:
-        await upsert_last_entry(
-            db,
-            api_key_id=api_key.id,
-            logbooks=payload.logbooks,
-            entry_id=result.id,
-        )
-    except Exception:
-        logger.exception("Failed to record last elog entry id; continuing")
 
     return result

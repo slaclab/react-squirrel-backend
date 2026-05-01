@@ -62,7 +62,8 @@ plugins:
       enable_creation_date: true
       fallback_to_build_date: true
   - git-committers:
-      enabled: !ENV [MKDOCS_GIT_COMMITTERS_APIKEY, false]
+      enabled: !ENV [CI, false]
+      token: !ENV [MKDOCS_GIT_COMMITTERS_APIKEY, ""]
       exclude:
         - index.md
       repository: slaclab/react-squirrel-backend
