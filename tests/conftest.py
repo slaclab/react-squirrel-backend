@@ -122,7 +122,7 @@ async def client(db_session: AsyncSession, mock_epics: MockEpicsService) -> Asyn
 
     async def override_get_api_key() -> ApiKeyDTO:
         return ApiKeyDTO(
-            id="test-key-id",
+            id="00000000-0000-0000-0000-000000000001",  # Test ID is valid UUID
             appName="TestClient",
             isActive=True,
             readAccess=True,

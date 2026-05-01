@@ -267,3 +267,17 @@ class TestApiKeyDeactivate:
         new_key = response.json()
         assert new_key["id"] != key["id"]
         assert new_key["isActive"] is True
+
+    @pytest.mark.asyncio
+    async def test_deactivate_own_key_returns_409(self, client: AsyncClient):
+        """Deactivating the authenticated key is blocked without force."""
+        response = await client.delete("/v1/api-keys/00000000-0000-0000-0000-000000000001")
+
+        assert response.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_deactivate_own_key_with_force_succeeds(self, client: AsyncClient):
+        """Deactivating the authenticated key succeeds with ?force=true."""
+        response = await client.delete("/v1/api-keys/00000000-0000-0000-0000-000000000001", params={"force": "true"})
+
+        assert response.status_code == 404  # key doesn't exist in DB, but guard passed
