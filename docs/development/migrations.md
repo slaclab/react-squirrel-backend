@@ -209,9 +209,6 @@ docker exec -it squirrel-db createdb -U squirrel squirrel
 
 # Re-run all migrations
 alembic upgrade head
-
-# Re-seed data
-python -m scripts.seed_pvs --count 100
 ```
 
 ## Alembic Configuration

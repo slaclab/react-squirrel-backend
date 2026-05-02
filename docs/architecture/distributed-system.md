@@ -10,9 +10,9 @@ FastAPI application serving REST and WebSocket endpoints. **Decoupled from PV mo
 
 **Startup Sequence:**
 
-1. Connect to Redis
-2. Start WebSocket DiffManager (subscribes to Redis pub/sub)
-3. Initialize EPICS service (for direct reads during snapshot restore)
+1. Initialize EPICS service (for direct reads during snapshot restore)
+2. Connect to Redis (used for reading cached values)
+3. Start WebSocket DiffManager (subscribes to Redis pub/sub)
 
 **Key Features:**
 
@@ -59,12 +59,14 @@ Pydantic-Settings with environment variable support (prefix: `SQUIRREL_`):
 
 | Category | Key Settings |
 |----------|--------------|
-| Database | `database_url`, `pool_size` (30), `max_overflow` (20) |
-| EPICS | `ca_addr_list`, `ca_timeout` (10s), `chunk_size` (1000) |
-| Redis | `redis_url`, `pv_cache_ttl` (60s) |
-| PV Monitor | `batch_size` (500), `batch_delay_ms` (100) |
-| Watchdog | `check_interval` (60s), `stale_threshold` (300s) |
-| WebSocket | `batch_interval_ms` (100) |
+| Database | `database_url`, `database_pool_size` (30), `database_max_overflow` (20) |
+| EPICS | `epics_ca_timeout` (10s), `epics_ca_conn_timeout` (5s), `epics_chunk_size` (1000) |
+| Redis | `redis_url`, `redis_pv_cache_ttl` (60s) |
+| PV Monitor | `pv_monitor_batch_size` (500), `pv_monitor_batch_delay_ms` (100) |
+| Watchdog | `watchdog_check_interval` (60s), `watchdog_stale_threshold` (300s) |
+| WebSocket | `websocket_batch_interval_ms` (100) |
+
+EPICS network discovery (`EPICS_CA_ADDR_LIST`, `EPICS_PVA_ADDR_LIST`, etc.) is configured via the standard EPICS library env vars — not through Pydantic settings.
 
 ## Performance Optimizations
 
@@ -111,41 +113,8 @@ Pydantic-Settings with environment variable support (prefix: `SQUIRREL_`):
 
 The circuit breaker prevents cascading failures when EPICS IOCs become unresponsive.
 
-```
-EPICS Request (caget/caput)
-         │
-         ▼
-┌─────────────────────────────────┐
-│   Circuit Breaker Check         │
-│   (by IOC prefix)               │
-└─────────────────┬───────────────┘
-         │
-    ┌────┴────┐
-    │         │
-    ▼         ▼
-┌───────┐   ┌───────────────────┐
-│ OPEN  │   │ CLOSED/HALF-OPEN │
-│       │   │                   │
-│ Fail  │   │ Execute request   │
-│ Fast  │   │                   │
-└───┬───┘   └─────────┬─────────┘
-    │                 │
-    │            ┌────┴────┐
-    │            │         │
-    │            ▼         ▼
-    │        ┌───────┐   ┌───────┐
-    │        │Success│   │Failure│
-    │        └───┬───┘   └───┬───┘
-    │            │           │
-    │            ▼           ▼
-    │     Reset count   Increment count
-    │     (HALF→CLOSED) (threshold→OPEN)
-    │            │           │
-    └────────────┴───────────┘
-                 │
-                 ▼
-             Response
-```
+![Circuit breaker state flow](../assets/figure-6-circuit-breaker-light.png#only-light)
+![Circuit breaker state flow](../assets/figure-6-circuit-breaker-dark.png#only-dark)
 
 **States:**
 
@@ -155,61 +124,15 @@ EPICS Request (caget/caput)
 
 ## Deployment Options
 
-### Docker Compose (Recommended)
-
-Full distributed deployment with all services:
-
-```bash
-cd docker
-docker-compose up --build
-```
-
-This starts:
-
-- **PostgreSQL** (port 5432)
-- **Redis** (port 6379)
-- **API** (port 8000) - REST/WebSocket server
-- **Monitor** (1 replica) - PV monitoring
-- **Worker** (2 replicas) - Background task processing
-
-### Legacy Mode
-
-For simpler deployments or backward compatibility:
-
-```bash
-cd docker
-docker-compose --profile legacy up backend db redis
-```
-
-### Local Development
-
-```bash
-# 1. Start infrastructure
-cd docker
-docker-compose up -d db redis
-
-# 2. Set up Python environment
-cd ..
-python -m venv venv
-source venv/bin/activate
-pip install -e ".[dev]"
-cp .env.example .env
-
-# 3. Run migrations
-alembic upgrade head
-
-# 4. Start services (in separate terminals)
-uvicorn app.main:app --reload --port 8000      # API
-python -m app.monitor_main                      # Monitor
-arq app.worker.WorkerSettings                   # Worker
-```
+For Docker Compose and local-development setup, see [Installation](../getting-started/installation.md).
 
 ## Health Monitoring
 
 | Endpoint | Description |
 |----------|-------------|
-| `/v1/health` | Overall API health |
-| `/v1/health/db` | Database connectivity |
-| `/v1/health/redis` | Redis connectivity |
+| `/v1/health/heartbeat` | Lightweight liveness check (no auth) |
+| `/v1/health/summary` | Consolidated health for dashboards (DB, Redis, monitor, watchdog) |
 | `/v1/health/monitor/status` | PV monitor process health (via heartbeat) |
 | `/v1/health/circuits` | Circuit breaker status by IOC prefix |
+
+See [REST Endpoints › Health](../api-reference/endpoints.md#health-endpoints) for the full list.

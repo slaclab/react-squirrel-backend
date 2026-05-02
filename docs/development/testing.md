@@ -84,14 +84,13 @@ async def test_create_pv(async_client: AsyncClient):
     response = await async_client.post(
         "/v1/pvs",
         json={
-            "setpoint_address": "TEST:PV:1",
+            "setpointAddress": "TEST:PV:1",
             "description": "Test PV"
         }
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["errorCode"] == 0
-    assert data["payload"]["setpoint_address"] == "TEST:PV:1"
+    assert data["setpointAddress"] == "TEST:PV:1"
 ```
 
 ### Service Tests
@@ -108,7 +107,7 @@ async def test_get_pv_by_address(db_session):
     repo = PVRepository(db_session)
     service = PVService(repo)
 
-    # Create a test PV
+    # Create a test PV (service-layer kwargs are snake_case)
     pv = await service.create_pv(
         setpoint_address="TEST:PV:1",
         description="Test"
@@ -222,14 +221,14 @@ async def test_pv_creation_with_tags(async_client, db_session):
         "/v1/tags",
         json={"name": "Test Group"}
     )
-    tag_group_id = tag_response.json()["payload"]["id"]
+    tag_group_id = tag_response.json()["id"]
 
     # Create PV with tag
     pv_response = await async_client.post(
         "/v1/pvs",
         json={
-            "setpoint_address": "TEST:PV:1",
-            "tag_ids": [tag_group_id]
+            "setpointAddress": "TEST:PV:1",
+            "tags": [tag_group_id]
         }
     )
 
@@ -244,14 +243,15 @@ Test complete workflows:
 @pytest.mark.asyncio
 async def test_snapshot_workflow(async_client):
     # 1. Create PVs
-    await async_client.post("/v1/pvs", json={"setpoint_address": "PV:1"})
+    await async_client.post("/v1/pvs", json={"setpointAddress": "PV:1"})
 
     # 2. Create snapshot
     snapshot_response = await async_client.post(
         "/v1/snapshots",
-        json={"title": "Test Snapshot", "use_cache": True}
+        json={"title": "Test Snapshot"},
+        params={"use_cache": True},
     )
-    job_id = snapshot_response.json()["payload"]["job_id"]
+    job_id = snapshot_response.json()["jobId"]
 
     # 3. Wait for job completion
     # ... poll job status ...

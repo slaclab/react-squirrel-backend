@@ -2,89 +2,8 @@
 
 This guide covers setting up a development environment and contributing to Squirrel Backend.
 
-## Project Structure
-
-```
-squirrel-backend/
-├── app/
-│   ├── main.py              # API entry point
-│   ├── monitor_main.py      # PV Monitor entry point
-│   ├── worker.py            # Arq worker configuration
-│   ├── config.py            # Configuration settings
-│   ├── api/v1/              # API endpoints
-│   ├── models/              # SQLAlchemy models
-│   ├── schemas/             # Pydantic schemas (DTOs)
-│   ├── services/            # Business logic layer
-│   ├── repositories/        # Data access layer
-│   ├── tasks/               # Arq task definitions
-│   └── db/                  # Database session management
-├── alembic/                 # Database migrations
-├── tests/                   # Test suite
-├── docker/                  # Docker configuration
-└── scripts/                 # Utility scripts
-```
-
-## Setting Up Development Environment
-
-### 1. Start Infrastructure
-
-```bash
-cd docker
-docker compose up -d db redis
-```
-
-### 2. Set Up Python Environment
-
-```bash
-cd ..
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -e ".[dev]"
-```
-
-Or use the setup script:
-
-```bash
-./setup.sh
-```
-
-### 3. Configure Environment
-
-```bash
-cp .env.example .env
-# Edit .env if needed (defaults work with docker compose)
-```
-
-### 4. Run Migrations
-
-```bash
-alembic upgrade head
-```
-
-### 5. Load Test Data
-
-```bash
-python -m scripts.seed_pvs --count 100
-```
-
-### 6. Start Services
-
-Run each in a separate terminal:
-
-=== "API Server"
-    ```bash
-    uvicorn app.main:app --reload --port 8000
-    ```
-
-=== "PV Monitor"
-    ```bash
-    python -m app.monitor_main
-    ```
-
-=== "Worker"
-    ```bash
-    arq app.worker.WorkerSettings
-    ```
+For the project layout, see [Architecture › Directory Structure](../architecture/index.md#directory-structure).
+For detailed local-install steps, see [Installation › Local Development](../getting-started/installation.md#option-2-local-development).
 
 ## Development Workflow
 
@@ -116,86 +35,9 @@ export SQUIRREL_DEBUG=true
 uvicorn app.main:app --reload --port 8000
 ```
 
-## Performance Benchmarking
-
-```bash
-# Start the backend first, then run:
-python -m scripts.benchmark
-
-# With more iterations
-python -m scripts.benchmark --iterations 10
-
-# Skip restore benchmark (no EPICS writes)
-python -m scripts.benchmark --skip-restore
-```
-
 ## Utility Scripts
 
-### seed_pvs.py
-
-Generate test PV data:
-
-```bash
-# Create 1000 test PVs with tags
-python -m scripts.seed_pvs --count 1000
-
-# Create 50K PVs for performance testing
-python -m scripts.seed_pvs --count 50000 --batch-size 5000
-
-# Clear existing data first
-python -m scripts.seed_pvs --count 1000 --clear
-```
-
-### upload_csv.py
-
-Import PVs from CSV:
-
-```bash
-# Dry run
-python -m scripts.upload_csv your_pvs.csv --dry-run
-
-# Full upload
-python -m scripts.upload_csv your_pvs.csv
-```
-
-### benchmark.py
-
-Performance testing:
-
-```bash
-python -m scripts.benchmark --iterations 5
-```
-
-### create_key.py
-
-Create a new API key. At least one of `--read` / `--write` is required:
-
-```bash
-python -m scripts.create_key <app_name> --read
-python -m scripts.create_key <app_name> --read --write
-```
-
-Output includes the app name, key ID, access level, creation timestamp, and the token. The token is only shown at creation time — store it securely.
-
-### list_keys.py
-
-List all API keys as a formatted table:
-
-```bash
-# All keys
-python -m scripts.list_keys
-
-# Active keys only
-python -m scripts.list_keys --active-only
-```
-
-### deactivate_key.py
-
-Deactivate an existing key by its ID. The key is retained in the database but can no longer authenticate requests:
-
-```bash
-python -m scripts.deactivate_key <id>
-```
+The `scripts/` directory contains management commands for API keys. See [API Key Management](../getting-started/api-keys.md) for full usage of `create_key.py`, `list_keys.py`, and `deactivate_key.py`.
 
 ## IDE Setup
 
@@ -244,6 +86,6 @@ pre-commit run --all-files
 
 ## Next Steps
 
-- [Testing](testing.md) - Running and writing tests
-- [Database Migrations](migrations.md) - Managing schema changes
-- [Code Quality](code-quality.md) - Linting and formatting
+- [Testing](testing.md) — running and writing tests
+- [Database Migrations](migrations.md) — managing schema changes
+- [Code Quality](code-quality.md) — linting and formatting

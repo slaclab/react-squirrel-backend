@@ -6,46 +6,8 @@ This document describes how data flows through the Squirrel Backend system for k
 
 Snapshot creation is an asynchronous operation that can read PV values from Redis cache (fast) or directly from EPICS (slower but always current).
 
-```
-API Request (/v1/snapshots POST)
-         │
-         ▼
-┌─────────────────────────────────┐
-│   JobService creates Job record │
-└─────────────────┬───────────────┘
-                  │
-         ▼ (enqueue to Arq)
-┌─────────────────────────────────┐
-│     Return Job ID immediately    │
-└─────────────────┬───────────────┘
-                  │
-         ▼ (Arq worker picks up)
-┌─────────────────────────────────┐
-│    Read PV addresses from DB     │
-└─────────────────┬───────────────┘
-                  │
-         ▼ (use_cache?)
-    ┌─────┴─────┐
-    │           │
-    ▼           ▼
-┌───────┐   ┌───────────────┐
-│ Redis │   │ EPICS direct  │
-│ <5s   │   │ 30-60s        │
-└───┬───┘   └───────┬───────┘
-    │               │
-    └───────┬───────┘
-            │
-            ▼
-┌─────────────────────────────────┐
-│  BulkInsertService (COPY)       │
-│  Insert SnapshotValues to DB    │
-└─────────────────┬───────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────┐
-│   Mark Job as COMPLETED          │
-└─────────────────────────────────┘
-```
+![Snapshot creation flow](../assets/figure-2-snapshot-flow-light.png#only-light)
+![Snapshot creation flow](../assets/figure-2-snapshot-flow-dark.png#only-dark)
 
 ### Performance Comparison
 
@@ -58,63 +20,8 @@ API Request (/v1/snapshots POST)
 
 The PV Monitor process maintains a live cache of all PV values in Redis and broadcasts updates to connected WebSocket clients.
 
-```
-            PV Monitor Process Startup
-                       │
-                       ▼
-          ┌────────────────────────┐
-          │  Acquire Leader Lock   │
-          │  (Redis SETNX)         │
-          └───────────┬────────────┘
-                      │
-                      ▼
-          ┌────────────────────────┐
-          │  Load PV addresses     │
-          │  from PostgreSQL       │
-          └───────────┬────────────┘
-                      │
-                      ▼
-          ┌────────────────────────┐
-          │  Batched PV init       │
-          │  (500/batch, 100ms)    │
-          └───────────┬────────────┘
-                      │
-      ┌───────────────┼───────────────┐
-      │               │               │
-      ▼               ▼               ▼
-┌──────────┐   ┌──────────┐   ┌──────────┐
-│ aioca    │   │ aioca    │   │ aioca    │
-│ monitor  │   │ monitor  │   │ monitor  │
-│ (batch 1)│   │ (batch 2)│   │ (batch N)│
-└────┬─────┘   └────┬─────┘   └────┬─────┘
-     │              │              │
-     └──────────────┼──────────────┘
-                    │
-                    ▼
-          ┌────────────────────────┐
-          │     Redis Cache        │
-          │  • Hash: pv:values     │
-          │  • Pub/Sub: updates    │
-          └───────────┬────────────┘
-                      │
-                      ▼ (Redis pub/sub)
-          ┌────────────────────────┐
-          │    API Instances       │
-          │  DiffStreamManager     │
-          └───────────┬────────────┘
-                      │
-                      ▼
-          ┌────────────────────────┐
-          │  Subscription Registry │
-          │  (Redis-based)         │
-          └───────────┬────────────┘
-                      │
-                      ▼
-          ┌────────────────────────┐
-          │   WebSocket Clients    │
-          │   (100ms batching)     │
-          └────────────────────────┘
-```
+![PV monitor startup and fan-out](../assets/figure-4-monitor-startup-light.png#only-light)
+![PV monitor startup and fan-out](../assets/figure-4-monitor-startup-dark.png#only-dark)
 
 ### Batching Strategy
 
@@ -130,42 +37,8 @@ PV subscriptions are created in batches to prevent overwhelming the EPICS networ
 
 WebSocket clients receive diff-based updates to minimize bandwidth:
 
-```
-┌──────────────────┐     ┌──────────────────┐
-│  Client A        │     │  Client B        │
-│  Subscribed to:  │     │  Subscribed to:  │
-│  PV1, PV2, PV3   │     │  PV2, PV4        │
-└────────┬─────────┘     └────────┬─────────┘
-         │                        │
-         └───────────┬────────────┘
-                     │
-                     ▼
-         ┌────────────────────────┐
-         │  Subscription Registry │
-         │  (Redis Set per PV)    │
-         └───────────┬────────────┘
-                     │
-                     ▼
-         ┌────────────────────────┐
-         │   DiffStreamManager    │
-         │   (per API instance)   │
-         └───────────┬────────────┘
-                     │
-                     │ PV2 changes
-                     ▼
-         ┌────────────────────────┐
-         │   Batch updates        │
-         │   (100ms window)       │
-         └───────────┬────────────┘
-                     │
-         ┌───────────┴───────────┐
-         │                       │
-         ▼                       ▼
-┌──────────────────┐     ┌──────────────────┐
-│  Client A        │     │  Client B        │
-│  Receives: PV2   │     │  Receives: PV2   │
-└──────────────────┘     └──────────────────┘
-```
+![WebSocket subscription fan-out](../assets/figure-3-pv-fanout-light.png#only-light)
+![WebSocket subscription fan-out](../assets/figure-3-pv-fanout-dark.png#only-dark)
 
 ### Bandwidth Savings
 
@@ -178,85 +51,15 @@ WebSocket clients receive diff-based updates to minimize bandwidth:
 
 Restoring a snapshot writes values back to EPICS:
 
-```
-API Request (/v1/snapshots/{id}/restore POST)
-         │
-         ▼
-┌─────────────────────────────────┐
-│   Load snapshot from DB          │
-└─────────────────┬───────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────┐
-│   Create Job record              │
-└─────────────────┬───────────────┘
-                  │
-         ▼ (enqueue to Arq)
-┌─────────────────────────────────┐
-│     Return Job ID immediately    │
-└─────────────────┬───────────────┘
-                  │
-         ▼ (Arq worker picks up)
-┌─────────────────────────────────┐
-│   Parallel EPICS writes          │
-│   (chunked, 1000/batch)          │
-└─────────────────┬───────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────┐
-│   Circuit breaker per IOC        │
-│   (fail-fast on unresponsive)    │
-└─────────────────┬───────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────┐
-│   Mark Job as COMPLETED          │
-│   (with success/failure counts)  │
-└─────────────────────────────────┘
-```
+![Snapshot restore flow](../assets/figure-8-restore-light.png#only-light)
+![Snapshot restore flow](../assets/figure-8-restore-dark.png#only-dark)
 
 ## Job Tracking
 
 All long-running operations use the job tracking system:
 
-```
-┌─────────────────┐
-│   API Request   │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Create Job     │──────────────┐
-│  status=PENDING │              │
-└────────┬────────┘              │
-         │                       │
-         ▼                       │
-┌─────────────────┐              │
-│  Enqueue Task   │              │
-│  (Arq/Redis)    │              │
-└────────┬────────┘              │
-         │                       │
-         ▼                       │
-┌─────────────────┐              │
-│  Return Job ID  │◄─────────────┘
-└────────┬────────┘
-         │
-         │ (client polls)
-         ▼
-┌─────────────────┐
-│  GET /jobs/{id} │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────────────────────┐
-│  Job Status Response            │
-│  {                              │
-│    "status": "IN_PROGRESS",     │
-│    "progress": 45,              │
-│    "data": {...}                │
-│  }                              │
-└─────────────────────────────────┘
-```
+![Job tracking and client polling](../assets/figure-5-polling-light.png#only-light)
+![Job tracking and client polling](../assets/figure-5-polling-dark.png#only-dark)
 
 ### Job States
 
