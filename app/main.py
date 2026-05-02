@@ -14,6 +14,7 @@ Benefits of decoupled architecture:
 
 import logging
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -24,6 +25,11 @@ from app.api.v1.router import router as v1_router
 from app.api.v1.websocket import get_diff_manager
 from app.services.epics_service import get_epics_service
 from app.services.redis_service import get_redis_service
+
+try:
+    __version__ = version("squirrel-backend")
+except PackageNotFoundError:
+    __version__ = "unknown"
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -116,7 +122,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Squirrel Backend",
     description="High-performance EPICS snapshot/restore backend with 40k PV support",
-    version="0.2.0",
+    version=__version__,
     lifespan=lifespan,
 )
 
@@ -154,4 +160,4 @@ async def health_check():
 # Root redirect
 @app.get("/")
 async def root():
-    return {"message": "Squirrel Backend API", "docs": "/docs", "health": "/v1/health/summary", "version": "0.2.0"}
+    return {"message": "Squirrel Backend API", "docs": "/docs", "health": "/v1/health/summary", "version": __version__}
