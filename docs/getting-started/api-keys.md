@@ -7,14 +7,14 @@ All Squirrel Backend endpoints require an API key for authentication. Keys are p
 - Tokens are prefixed with `sq_` (e.g., `sq_abc123...`) and are only shown **once** at creation time.
 - The server stores a SHA-256 hash of the token — the plaintext is never persisted.
 - Each key is associated with an **app name** (a human-readable identifier for the client).
-- Permissions are controlled by two flags: `read_access` and `write_access`.
+- Permissions are controlled by two flags: `readAccess` and `writeAccess`.
 
 ## Permission Model
 
 | Permission | Required for |
 |------------|--------------|
-| `read_access` | GET requests, WebSocket connections |
-| `write_access` | POST, PUT, DELETE requests; creating/deactivating API keys |
+| `readAccess` | GET requests, WebSocket connections |
+| `writeAccess` | POST, PUT, DELETE requests; creating/deactivating API keys |
 
 A key can have read-only, write-only, or both permissions.
 
@@ -150,11 +150,11 @@ API Key deactivated successfully
   Updated At: 2026-03-30 18:30:14.61
 ```
 
-Deactivated keys are soft-deleted (`is_active=False`) and their app name can be reused for a new key.
+Deactivated keys are soft-deleted (`isActive=false`) and their app name can be reused for a new key.
 
 ## Managing Keys via REST API
 
-Once you have a key with `write_access`, you can manage keys through the API itself.
+Once you have a key with `writeAccess`, you can manage keys through the API itself.
 
 ### List Keys
 
@@ -171,20 +171,17 @@ GET /v1/api-keys
 **Response:**
 
 ```json
-{
-  "errorCode": 0,
-  "errorMessage": null,
-  "payload": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "app_name": "my-app",
-      "read_access": true,
-      "write_access": true,
-      "is_active": true,
-      "created_at": "2026-03-27T10:00:00Z"
-    }
-  ]
-}
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "appName": "my-app",
+    "isActive": true,
+    "readAccess": true,
+    "writeAccess": true,
+    "createdAt": "2026-03-27T10:00:00Z",
+    "updatedAt": "2026-03-27T10:00:00Z"
+  }
+]
 ```
 
 ### Create a Key
@@ -207,17 +204,14 @@ POST /v1/api-keys
 
 ```json
 {
-  "errorCode": 0,
-  "errorMessage": null,
-  "payload": {
-    "id": "660e8400-...",
-    "app_name": "new-client",
-    "token": "sq_newTokenHere...",
-    "read_access": true,
-    "write_access": false,
-    "is_active": true,
-    "created_at": "2026-03-27T12:00:00Z"
-  }
+  "id": "660e8400-...",
+  "appName": "new-client",
+  "token": "sq_newTokenHere...",
+  "isActive": true,
+  "readAccess": true,
+  "writeAccess": false,
+  "createdAt": "2026-03-27T12:00:00Z",
+  "updatedAt": "2026-03-27T12:00:00Z"
 }
 ```
 
